@@ -62,12 +62,15 @@ function ROM:initialize(conf, cpu, ppu, basename, bytes, str)
     end
     self.prg_ref = {}
     fill(self.prg_ref, 0, 0x10000)
-    for i = 0x8000 + 1, 0x4000 do
+    for i = 0x8000 + 1, 0x4000 + 0x8000 + 1 do
         self.prg_ref[i] = self.prg_banks[1][i - 0x8000]
     end
-    for i = 0xc000 + 1, 0x4000 do
+    for i = 0xc000 + 1, 0x4000 + 0xc000 + 1 do
         self.prg_ref[i] = self.prg_banks[#(self.prg_banks)][i - 0xc000]
     end
+    UTILS.print("rominit")
+    UTILS.print(self.prg_ref[0x8000 + 1])
+    UTILS.print(self.prg_banks[1][1])
 
     self.chr_ram = chr_count == 0 -- No CHR bank implies CHR-RAM (writable CHR bank)
     self.chr_ref = self.chr_ram and (fill({}, 0, 0x2000)) or copy(self.chr_banks[1])
@@ -88,6 +91,12 @@ function ROM:initialize(conf, cpu, ppu, basename, bytes, str)
 
     self.ppu.nametables = self.mirroring
     self.ppu.set_chr_mem(self.chr_ref, self.chr_ram)
+    UTILS.print(#(self.chr_ref))
+    UTILS.print(#(self.chr_banks))
+    UTILS.print(#(self.prg_ref))
+    UTILS.print((self.chr_ref[1]))
+    UTILS.print(#(self.chr_banks[1]))
+    UTILS.print((self.prg_ref[1]))
 end
 
 function ROM:init()
@@ -403,7 +412,7 @@ function MMC3:reset()
     self.wrk_readable = true
     self.wrk_writable = false
 
-    local poke_a000 = self.mirroring ~= "FourScreen" and bind(self.poke_a000, self) or nil
+    local poke_a000 = self.mirroring ~= "FourScreen" and bind(self.poke_a000, self) or CPU.UNDEFINED
     self.cpu.add_mappings(range(0x6000, 0x7fff), bind(self.peek_6000, self), bind(self.poke_6000, self))
     local g = tGetter(self.prg_ref)
     self.cpu.add_mappings(range(0x8000, 0x9fff, 2), g, bind(self.poke_8000, self))

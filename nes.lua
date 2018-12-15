@@ -31,6 +31,8 @@ function NES:run()
         self.rom:vsync()
 
         self.frame = self.frame + 1
+        UTILS.print("FRAME")
+        UTILS.print(self.frame)
     end
 end
 function NES:new(file)

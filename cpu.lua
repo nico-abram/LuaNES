@@ -80,26 +80,31 @@ function CPU:peek_nop(addr)
     return bit.rshift(addr, 8)
 end
 
-function CPU:peek_jam1(addr)
+function CPU:peek_jam_1(addr)
     self._pc = bit.band(self._pc - 1, 0xffff)
     return 0xfc
 end
-function CPU:peek_jam2(_addr)
+function CPU:peek_jam_2(_addr)
     return 0xff
 end
 
 function CPU:peek_ram(addr)
-    return self.ram[addr % CPU.RAM_SIZE]
+    return self.ram[addr % CPU.RAM_SIZE+1]
 end
 function CPU:poke_ram(addr, data)
-    self.ram[addr % CPU.RAM_SIZE] = data
+    self.ram[addr % CPU.RAM_SIZE+1] = data
 end
 
 function CPU:fetch(addr)
     local v =  self._fetch[addr]
-    UTILS.print(addr)
-    UTILS.print(v)
-    v = (type(v) == "table" and v == UNDEFINED) and nil or v
+    ---[[
+    print("FETCH")
+    print(addr)
+    print(v)
+    --]]
+    v = (type(v) ~= "table" or v ~= UNDEFINED) and v or nil
+    print(v and v(addr) or "NOPE")
+    print("FETCHE")
     return v and v(addr) or nil
 end
 function CPU:store(addr, value)
@@ -107,8 +112,15 @@ function CPU:store(addr, value)
 end
 
 function CPU:peek16(addr)
-    print "asdasd"
-    return self:fetch(addr) + bit.lshift(self:fetch(addr + 1), 8)
+  local a = self:fetch(addr)
+  local b = bit.lshift(self:fetch(addr + 1), 8)
+  local x = a + b
+    print "peek16"
+    UTILS.print(a)
+    UTILS.print(b)
+    UTILS.print(addr)
+    UTILS.print(x)
+    return x
 end
 
 function CPU:add_mappings(addr, peek, poke)
@@ -122,7 +134,7 @@ function CPU:add_mappings(addr, peek, poke)
     for i = 1, #addr do
         local x = addr[i]
         self._fetch[x] = peek
-        self._store[x] = poke or CPU.PokeNop
+        self._store[x] = (poke and type(poke)=="table" and poke ~= UNDEFINED) and poke or CPU.PokeNop
     end
 end
 
@@ -137,7 +149,7 @@ function CPU:reset()
     self._p_v = 0
     self._p_i = 0x04
     self._p_d = 0
-    fill(self.ram, 0, 0xff)
+    fill(self.ram, 0xff)
     self.clk = 0
     self.clk_total = 0
     self:add_mappings(range(0x0000, 0x07ff), tGetter(self.ram), tSetter(self.ram))
@@ -188,10 +200,10 @@ function CPU:dmc_dma(addr)
 end
 
 function CPU:sprite_dma(addr, sp_ram)
-    for i = 1, 256 do
-        sp_ram[i] = self.ram[addr + i]
+    for i = 0, 255 do
+        sp_ram[i] = self.ram[addr + i+1]
     end
-    for i = 1, 64 do
+    for i = 0, 63 do
         sp_ram[i * 4 + 2] = bit.band(sp_ram[i * 4 + 2], 0xe3)
     end
 end
@@ -285,7 +297,7 @@ end
 ------ P regeister ------
 
 function CPU:flags_pack()
-    bit.bor(
+    return bit.bor(
         bit.bor(
             bit.bor(
                 bit.bor(
@@ -298,7 +310,7 @@ function CPU:flags_pack()
                     ),
                     self._p_v ~= 0 and 0x40 or 0
                 ),
-                self.p_i
+                self._p_i
             ),
             self._p_d
         ),
@@ -344,12 +356,12 @@ function CPU:store_mem()
 end
 
 function CPU:store_zpg()
-    self.ram[self.addr] = self.data
+    self.ram[self.addr+1] = self.data
 end
 
 ------ stack management ------
 function CPU:push8(data)
-    self.ram[0x0100 + self._sp] = data
+    self.ram[0x0100 + self._sp+1] = data
     self._sp = bit.band((self._sp - 1), 0xff)
 end
 
@@ -360,7 +372,7 @@ end
 
 function CPU:pull8()
     self._sp = bit.band(self._sp + 1, 0xff)
-    return self.ram[0x0100 + self._sp]
+    return self.ram[0x0100 + self._sp+1]
 end
 
 function CPU:pull16()
@@ -384,7 +396,7 @@ function CPU:zpg(read, write)
     self._pc = self._pc + 1
     self.clk = self.clk + CLK[3]
     if read then
-        self.data = self.ram[self.addr]
+        self.data = self.ram[self.addr+1]
         if write then
             self.clk = self.clk + CLK[2]
         end
@@ -397,7 +409,7 @@ function CPU:zpg_reg(indexed, read, write)
     self._pc = self._pc + 1
     self.clk = self.clk + CLK[4]
     if read then
-        self.data = self.ram[self.addr]
+        self.data = self.ram[self.addr+1]
         if write then
             self.clk = self.clk + CLK[2]
         end
@@ -453,7 +465,7 @@ function CPU:ind_x(read, write)
     local addr = self:fetch(self._pc) + self._x
     self._pc = self._pc + 1
     self.clk = self.clk + CLK[5]
-    self.addr = bit.bor(self.ram[bit.band(addr, 0xff)], bit.lshift(self.ram[bit.band(addr + 1, 0xff)], 8))
+    self.addr = bit.bor(self.ram[bit.band(addr, 0xff)+1], bit.lshift(self.ram[1+bit.band(addr + 1, 0xff)], 8))
     return self:read_write(read, write)
 end
 
@@ -461,15 +473,15 @@ end
 function CPU:ind_y(read, write)
     local addr = self:fetch(self._pc)
     self._pc = self._pc + 1
-    local indexed = self.ram[addr] + self._y
+    local indexed = self.ram[addr+1] + self._y
     self.clk = self.clk + CLK[4]
     if write then
         self.clk = self.clk + CLK[1]
-        self.addr = bit.lshift(self.ram[bit.band(addr + 1, 0xff)], 8) + indexed
+        self.addr = bit.lshift(self.ram[bit.band(addr + 1, 0xff)+1], 8) + indexed
         addr = self.addr - bit.band(indexed, 0x100) -- for inlining fetch
         self:fetch(addr)
     else
-        self.addr = bit.band(bit.lshift(self.ram[bit.band(addr + 1, 0xff)], 8) + indexed, 0xffff)
+        self.addr = bit.band(bit.lshift(self.ram[bit.band(addr + 1, 0xff)+1], 8) + indexed, 0xffff)
         if bit.band(indexed, 0x100) ~= 0 then
             addr = bit.band(self.addr - 0x100, 0xffff) -- for inlining fetch
             self:fetch(addr)
@@ -481,8 +493,12 @@ end
 
 
     function CPU:read_write(read, write)
+        print("READWRITE")
       if read then
+        print(self.addr)
+        print(self.data)
         self.data = self:fetch(self.addr)
+        print(self.data)
         self.clk =self.clk + CLK[1]
         if write then
           self:store(self.addr, self.data)
@@ -655,6 +671,8 @@ end
     end
 
     function CPU:_bit()
+      print(self._a)
+      print(self.data)
       self._p_nz = bit.bor((bit.band(self.data , self._a) ~= 0 and 1 or 0) ,bit.lshift(bit.band(self.data, 0x80), 1))
       self._p_v = bit.band(self.data , 0x40)
     end
@@ -865,7 +883,7 @@ end
     end
 
     function CPU:_isb()
-      self.data = bit.band((self.data + 1), 0xff)
+      self.data = bit.band(self.data + 1, 0xff)
       return self:_sbc()
     end
 
@@ -1028,12 +1046,16 @@ end
       end
       self.clk_target = clock
     end
+    local asd = 0
     function CPU:run()
       self:do_clock()
       repeat
         repeat
           self.opcode = self:fetch(self._pc)
-
+          UTILS.print("loop "..tostring(asd))
+          UTILS.print"opcode"
+          UTILS.print(self.opcode)
+          UTILS.print(self.DISPATCH[self.opcode])
           if self.conf.loglevel >= 3 then
             self.conf.debug(string.format("PC:%04X A:%02X X:%02X Y:%02X P:%02X SP:%02X CYC:%3d : OPCODE:%02X (%d, %d)" ,
               self._pc, self._a, self._x, self._y, self:flags_pack(), self._sp, self.clk / 4 % 341, self.opcode, self.cl
@@ -1049,6 +1071,7 @@ end
             self[f](self, unpack(operationData, 2))
 
           if self.ppu_sync then self.ppu.sync(self.clk)  end
+          asd = asd+1
         until self.clk < self.clk_target
         self:do_clock()
     until self.clk < self.clk_frame
@@ -1063,21 +1086,22 @@ end
     CPU.DISPATCH = {}
     local function op(opcodes, args)
         for _,opcode in ipairs(opcodes) do
+      local send_args
             if type(args) == "table" then
-                if (args[0] == "r_op" or args[0] == "w_op" or args[0] == "rw_op") then
+                if (args[1] == "r_op" or args[1] == "w_op" or args[1] == "rw_op") then
                     local kind, ope, mode = args[1], args[2], args[3]
-                    mode = CPU.ADDRESSING_MODES[mode][bit.band(bit.rshift(opcode, 2), 7)]
-                    local send_args = {kind, ope, mode}
+                    mode = CPU.ADDRESSING_MODES[mode][bit.band(bit.rshift(opcode, 2), 7)+1]
+                    send_args = {kind, ope, mode}
                     if kind ~= "r_op" then
-                        send_args[#send_args+1]= (mode:sub(1, 3) == "zpg" and "store_zpg" or "store_me")
+                        send_args[#send_args+1]= (mode:sub(1, 3) == "zpg" and "store_zpg" or "store_mem")
                     end
-                    CPU.DISPATCH[opcode] = send_args
                 else
-                    CPU.DISPATCH[opcode] = args
+                    send_args = args
                 end
             else
-            CPU.DISPATCH[opcode] = {args}
+            send_args = {args}
             end
+            CPU.DISPATCH[opcode] = send_args
         end
     end
 
