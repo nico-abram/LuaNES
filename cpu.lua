@@ -29,12 +29,21 @@ CPU.IRQ_DMC = 0x80
 local UNDEFINED = CPU.UNDEFINED
 local CLK = CPU.CLK
 
+local nthBitIsSet = UTILS.nthBitIsSet
 local isDefined = UTILS.isDefined
 local bind = UTILS.bind
 local tSetter = UTILS.tSetter
 local tGetter = UTILS.tGetter
 local fill = UTILS.fill
 local range = UTILS.range
+local map = UTILS.map
+local flat_map = UTILS.flat_map
+local uniq = UTILS.uniq
+local clear = UTILS.clear
+local all = UTILS.all
+local copy = UTILS.copy
+local nthBitIsSetInt = UTILS.nthBitIsSetInt
+local transpose = UTILS.transpose
 
 CPU.PokeNop = function()
 end
@@ -97,14 +106,14 @@ end
 
 function CPU:fetch(addr)
     local v =  self._fetch[addr]
-    ---[[
+    --[[
     print("FETCH")
     print(addr)
     print(v)
+    print(v(addr))
+    print("FETCHE")
     --]]
     v = (type(v) ~= "table" or v ~= UNDEFINED) and v or nil
-    print(v and v(addr) or "NOPE")
-    print("FETCHE")
     return v and v(addr) or nil
 end
 function CPU:store(addr, value)
@@ -115,11 +124,13 @@ function CPU:peek16(addr)
   local a = self:fetch(addr)
   local b = bit.lshift(self:fetch(addr + 1), 8)
   local x = a + b
+  --[[
     print "peek16"
     UTILS.print(a)
     UTILS.print(b)
     UTILS.print(addr)
     UTILS.print(x)
+    --]]
     return x
 end
 
@@ -342,7 +353,7 @@ function CPU:branch(cond)
         local tmp = self._pc + 1
         local rel = self:fetch(self._pc)
         self._pc = bit.band(tmp + (rel < 128 and rel or bit.bor(rel, 0xff00)), 0xffff)
-        self.clk = self.clk + (tmp[8] == self._pc[8] and CLK[3] or CLK[4])
+        self.clk = self.clk + (nthBitIsSetInt(tmp,8) == nthBitIsSetInt(self._pc,8) and CLK[3] or CLK[4])
     else
         self._pc = self._pc + 1
         self.clk = self.clk + CLK[2]
@@ -493,12 +504,8 @@ end
 
 
     function CPU:read_write(read, write)
-        print("READWRITE")
       if read then
-        print(self.addr)
-        print(self.data)
         self.data = self:fetch(self.addr)
-        print(self.data)
         self.clk =self.clk + CLK[1]
         if write then
           self:store(self.addr, self.data)
@@ -605,19 +612,19 @@ end
     end
 
     function CPU:_bne()
-      return self:branch(bit.band(self._p_nz , 0xff ~= 0))
+      return self:branch(bit.band(self._p_nz , 0xff) ~= 0)
     end
 
     function CPU:_beq()
-      return self:branch(bit.band(self._p_nz , 0xff == 0))
+      return self:branch(bit.band(self._p_nz , 0xff) == 0)
     end
 
     function CPU:_bmi()
-      return self:branch(bit.band(self._p_nz , 0x180 ~= 0))
+      return self:branch(bit.band(self._p_nz , 0x180) ~= 0)
     end
 
     function CPU:_bpl()
-      return self:branch(bit.band(self._p_nz , 0x180 == 0))
+      return self:branch(bit.band(self._p_nz , 0x180) == 0)
     end
 
     function CPU:_bcs()
@@ -671,8 +678,6 @@ end
     end
 
     function CPU:_bit()
-      print(self._a)
-      print(self.data)
       self._p_nz = bit.bor((bit.band(self.data , self._a) ~= 0 and 1 or 0) ,bit.lshift(bit.band(self.data, 0x80), 1))
       self._p_v = bit.band(self.data , 0x40)
     end
@@ -1052,10 +1057,7 @@ end
       repeat
         repeat
           self.opcode = self:fetch(self._pc)
-          UTILS.print("loop "..tostring(asd))
-          UTILS.print"opcode"
-          UTILS.print(self.opcode)
-          UTILS.print(self.DISPATCH[self.opcode])
+          print(string.format("%u %u %s \t %u %u %u %u %d %u", self.addr, self.data, table.concat(CPU.DISPATCH[self.opcode], " "),self._a, self._x, self._y, self._p_c, self._pc, self.clk))
           if self.conf.loglevel >= 3 then
             self.conf.debug(string.format("PC:%04X A:%02X X:%02X Y:%02X P:%02X SP:%02X CYC:%3d : OPCODE:%02X (%d, %d)" ,
               self._pc, self._a, self._x, self._y, self:flags_pack(), self._sp, self.clk / 4 % 341, self.opcode, self.cl
@@ -1072,6 +1074,9 @@ end
 
           if self.ppu_sync then self.ppu.sync(self.clk)  end
           asd = asd+1
+          if asd > 30 then
+            error "asd"
+          end
         until self.clk < self.clk_target
         self:do_clock()
     until self.clk < self.clk_frame

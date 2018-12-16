@@ -8,12 +8,20 @@ ROM.MAPPER_DB = {
 }
 
 local nthBitIsSet = UTILS.nthBitIsSet
+local isDefined = UTILS.isDefined
+local bind = UTILS.bind
+local tSetter = UTILS.tSetter
 local tGetter = UTILS.tGetter
 local fill = UTILS.fill
 local range = UTILS.range
 local map = UTILS.map
-local bind = UTILS.bind
+local flat_map = UTILS.flat_map
+local uniq = UTILS.uniq
+local clear = UTILS.clear
+local all = UTILS.all
 local copy = UTILS.copy
+local nthBitIsSetInt = UTILS.nthBitIsSetInt
+local transpose = UTILS.transpose
 
 function ROM:initialize(conf, cpu, ppu, basename, bytes, str)
     self.conf = conf or {}
@@ -68,10 +76,11 @@ function ROM:initialize(conf, cpu, ppu, basename, bytes, str)
     for i = 0xc000 + 1, 0x4000 + 0xc000 + 1 do
         self.prg_ref[i] = self.prg_banks[#(self.prg_banks)][i - 0xc000]
     end
+    --[[
     UTILS.print("rominit")
     UTILS.print(self.prg_ref[0x8000 + 1])
     UTILS.print(self.prg_banks[1][1])
-
+--]]
     self.chr_ram = chr_count == 0 -- No CHR bank implies CHR-RAM (writable CHR bank)
     self.chr_ref = self.chr_ram and (fill({}, 0, 0x2000)) or copy(self.chr_banks[1])
 
@@ -91,12 +100,14 @@ function ROM:initialize(conf, cpu, ppu, basename, bytes, str)
 
     self.ppu.nametables = self.mirroring
     self.ppu.set_chr_mem(self.chr_ref, self.chr_ram)
+    --[[
     UTILS.print(#(self.chr_ref))
     UTILS.print(#(self.chr_banks))
     UTILS.print(#(self.prg_ref))
     UTILS.print((self.chr_ref[1]))
     UTILS.print(#(self.chr_banks[1]))
     UTILS.print((self.prg_ref[1]))
+    --]]
 end
 
 function ROM:init()
@@ -482,8 +493,8 @@ end
 
 function MMC3:poke_8000(_addr, data)
     self.reg_select = bit.band(data, 7)
-    prg_bank_swap = data[6] == 1
-    chr_bank_swap = data[7] == 1
+    local prg_bank_swap = data[6] == 1
+    local chr_bank_swap = data[7] == 1
 
     if prg_bank_swap ~= self.prg_bank_swap then
         self.prg_bank_swap = prg_bank_swap

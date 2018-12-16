@@ -7,7 +7,7 @@ end
 
 function UTILS.bind(f, param)
     return function(...)
-        f(param, ...)
+        return f(param, ...)
     end
 end
 
@@ -94,6 +94,41 @@ function UTILS.dump(o)
     else
         return tostring(o)
     end
+end
+function UTILS.all(t, f)
+    for i = 1, #t do
+        if not f(t[i]) then
+            return false
+        end
+    end
+    return true
+end
+function UTILS.flat_map(t, f)
+    t = UTILS.map(t, f)
+    local tt = {}
+    for i, st in ipairs(t) do
+        for i, v in ipairs(st) do
+            tt[#tt + 1] = v
+        end
+    end
+    return tt
+end
+function UTILS.clear(t)
+    for k in pairs(t) do
+        t[k] = nil
+    end
+end
+function UTILS.uniq(t)
+    local tt = {}
+    local done = {}
+    for i = 1, #t do
+        local x = t[i]
+        if not done[x] then
+            tt[#tt + 1] = x
+            done[x] = true
+        end
+    end
+    return tt
 end
 local p = print
 function UTILS.print(x)

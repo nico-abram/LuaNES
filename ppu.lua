@@ -2,6 +2,29 @@
 PPU = {}
 local PPU = PPU
 PPU._mt = {__index = PPU}
+function PPU:new(conf, cpu, palette)
+    local ppu = {}
+    setmetatable(ppu, PPU._mt)
+    ppu:initialize(conf, cpu, palette)
+    return ppu
+end
+local nthBitIsSet = UTILS.nthBitIsSet
+local isDefined = UTILS.isDefined
+local bind = UTILS.bind
+local tSetter = UTILS.tSetter
+local tGetter = UTILS.tGetter
+local fill = UTILS.fill
+local range = UTILS.range
+local rotate = UTILS.rotate
+local map = UTILS.map
+local flat_map = UTILS.flat_map
+local uniq = UTILS.uniq
+local clear = UTILS.clear
+local all = UTILS.all
+local copy = UTILS.copy
+local nthBitIsSetInt = UTILS.nthBitIsSetInt
+local transpose = UTILS.transpose
+
     -- clock/timing constants (stolen from Nestopia)
     PPU.RP2C02_CC         = 4
     PPU.RP2C02_HACTIVE    = PPU.RP2C02_CC * 256
@@ -29,7 +52,8 @@ PPU._mt = {__index = PPU}
     PPU.HCLOCK_VBLANK_2 = 684
     PPU.HCLOCK_BOOT     = 685
     PPU.DUMMY_FRAME = {PPU.RP2C02_HVINT / PPU.RP2C02_CC - PPU.HCLOCK_DUMMY, PPU.RP2C02_HVINT, PPU.RP2C02_HVSYNC_0}
-    PPU.BOOT_FRAME = {PPU.RP2C02_HVSYNCBOOT / PPU.RP2C02_CC - PPU.HCLOCK_BOOT, PPU.RP2C02_HVSYNCBOOT, PPU.RP2C02_HVSYNCBOOT}
+    PPU.BOOT_FRAME = {PPU.RP2C02_HVSYNCBOOT / PPU.RP2C02_CC - PPU.HCLOCK_BOOT,
+        PPU.RP2C02_HVSYNCBOOT, PPU.RP2C02_HVSYNCBOOT}
 
     -- constants related to OAM (sprite)
     PPU.SP_PIXEL_POSITIONS = {
@@ -38,14 +62,15 @@ PPU._mt = {__index = PPU}
     }
 
     -- A look-up table mapping: (two pattern bytes * attr) -> eight pixels
-    --   TILE_LUT[attr][high_byte * 0x100 + low_byte] = [pixels] * 8
-    TILE_LUT = map({0x0, 0x4, 0x8, 0xc}, function (attr)
-        map(range(0,7), function(j) 
-            return transpose(map(range(0,0x10000), function(i) 
+    --   PPU.TILE_LUT[attr][high_byte * 0x100 + low_byte] = [pixels] * 8
+    PPU.TILE_LUT = transpose(map({0x0, 0x4, 0x8, 0xc}, function (attr)
+        return map(range(0,7), function(j)
+            return map(range(0,0x10000), function(i)
                 local clr = nthBitIsSetInt(i,15 - j) * 2 + nthBitIsSetInt(i,7 - j)
                 return clr ~= 0 and bit.bor( attr, clr) or 0
-            end))
+            end)
         end)
+    end))
         --[[
       (0..7).map do |j|
         (0...0x10000).map do |i|
@@ -56,9 +81,8 @@ PPU._mt = {__index = PPU}
       ]]
       -- Super dirty hack: This Array--transpose reduces page-faults.
       -- It might generate cache-friendly memory layout...
-    end)
 
-    ------------------------------------------------------------------------------------------------------------------------------------------------------
+    --------------------------------------------------------------------------------------------------------------------
     -- initialization
 
     function PPU:initialize(conf, cpu, palette)
@@ -67,28 +91,28 @@ PPU._mt = {__index = PPU}
       self.palette = palette
 
       self.nmt_mem = {fill({}, 0xff,0x400),fill({}, 0xff,0x400)}--[  [0xff] * 0x400, [0xff] * 0x400]
-      self.nmt_ref = map({0, 1, 0, 1},function(i) return self.nmt_mem[i] end)
+      self.nmt_ref = map({1, 2, 1, 2},function(i) return self.nmt_mem[i] end)
 
       self.output_pixels = {}
       self.output_color = fill({},{self.palette[0]}, 0x20) -- palette size is 0x20
 
-      reset(false)
+      self:reset(false)
       self:setup_lut()
     end
 
     function PPU:reset(mapping)
       if mapping then
         -- setup mapped memory
-        self.cpu.add_mappings(range(0x2000,0x3fff, 8), bind(self.peek_2xxx, self), bind(self.poke_2000, self))
-        self.cpu.add_mappings(range(0x2001,0x3fff, 8), bind(self.peek_2xxx, self), bind(self.poke_2001, self))
-        self.cpu.add_mappings(range(0x2002,0x3fff, 8), bind(self.peek_2002, self), bind(self.poke_2xxx, self))
-        self.cpu.add_mappings(range(0x2003,0x3fff, 8), bind(self.peek_2xxx, self), bind(self.poke_2003, self))
-        self.cpu.add_mappings(range(0x2004,0x3fff, 8), bind(self.peek_2004, self), bind(self.poke_2004, self))
-        self.cpu.add_mappings(range(0x2005,0x3fff, 8), bind(self.peek_2xxx, self), bind(self.poke_2005, self))
-        self.cpu.add_mappings(range(0x2006,0x3fff, 8), bind(self.peek_2xxx, self), bind(self.poke_2006, self))
-        self.cpu.add_mappings(range(0x2007,0x3fff, 8), bind(self.peek_2007, self), bind(self.poke_2007, self))
-        self.cpu.add_mappings(0x3000, bind(self.peek_3000, self), bind(self.poke_2000, self))
-        self.cpu.add_mappings(0x4014, bind(self.peek_4014, self), bind(self.poke_4014, self))
+        self.cpu:add_mappings(range(0x2000,0x3fff, 8), bind(self.peek_2xxx, self), bind(self.poke_2000, self))
+        self.cpu:add_mappings(range(0x2001,0x3fff, 8), bind(self.peek_2xxx, self), bind(self.poke_2001, self))
+        self.cpu:add_mappings(range(0x2002,0x3fff, 8), bind(self.peek_2002, self), bind(self.poke_2xxx, self))
+        self.cpu:add_mappings(range(0x2003,0x3fff, 8), bind(self.peek_2xxx, self), bind(self.poke_2003, self))
+        self.cpu:add_mappings(range(0x2004,0x3fff, 8), bind(self.peek_2004, self), bind(self.poke_2004, self))
+        self.cpu:add_mappings(range(0x2005,0x3fff, 8), bind(self.peek_2xxx, self), bind(self.poke_2005, self))
+        self.cpu:add_mappings(range(0x2006,0x3fff, 8), bind(self.peek_2xxx, self), bind(self.poke_2006, self))
+        self.cpu:add_mappings(range(0x2007,0x3fff, 8), bind(self.peek_2007, self), bind(self.poke_2007, self))
+        self.cpu:add_mappings(0x3000, bind(self.peek_3000, self), bind(self.poke_2000, self))
+        self.cpu:add_mappings(0x4014, bind(self.peek_4014, self), bind(self.poke_4014, self))
       end
 
       self.palette_ram = {
@@ -152,7 +176,7 @@ PPU._mt = {__index = PPU}
       self.bg_pattern_lut = PPU.TILE_LUT[1]
       self.bg_pattern_lut_fetched = PPU.TILE_LUT[1]
       -- invariant:
-      --   self.bg_pattern_lut_fetched == TILE_LUT[
+      --   self.bg_pattern_lut_fetched == PPU.TILE_LUT[
       --     self.nmt_ref[self.io_addr >> 10 & 3][self.io_addr & 0x03ff] >>
       --       ((self.scroll_addr_0_4 & 0x2) | (self.scroll_addr_5_14[6] * 0x4)) & 3
       --   ]
@@ -169,7 +193,7 @@ PPU._mt = {__index = PPU}
 
       -- for OAM fetcher
       self.sp_phase = 0
-      self.sp_ram = fill({},{xff}, 0x100) -- ram size is 0x100, 0xff is a OAM garbage
+      self.sp_ram = fill({},{0xff}, 0x100) -- ram size is 0x100, 0xff is a OAM garbage
       self.sp_index = 0
       self.sp_addr = 0
       self.sp_latch = 0
@@ -195,9 +219,9 @@ PPU._mt = {__index = PPU}
       self.lut_update ={}--{}.compare_by_identity
 
       self.name_lut = map(range(0,0xffff), function(i)
-        nmt_bank = self.nmt_ref[bit.band(bit.rshift(i , 10) , 3)]
-        nmt_idx = bit.band(i , 0x03ff)
-        fixed = bit.bor(bit.band(bit.rshift(i , 12), 7) , bit.lshift(i[15] , 12))
+        local nmt_bank = self.nmt_ref[bit.band(bit.rshift(i , 10) , 3)+1]
+        local nmt_idx = bit.band(i , 0x03ff)+1
+        local fixed = bit.bor(bit.band(bit.rshift(i , 12), 7) , bit.lshift( nthBitIsSetInt(i,15) , 12))
         -- WTF
         --(((self.lut_update[nmt_bank] or= [])[nmt_idx] or= [nil, nil])[0] or= []) << [i, fixed]
         return bit.bor(bit.lshift(nmt_bank[nmt_idx] , 4) , fixed)
@@ -205,158 +229,188 @@ PPU._mt = {__index = PPU}
 
       local entries = {}
       self.attr_lut = map(range(0,0x7fff), function(i)
-        local io_addr = bit.bor(0x23c0 , bit.bor(bit.band(i , 0x0c00) , bit.bor(bit.band(bit.rshift(i , 4) , 0x0038) , bit.band(bit.rshift(i , 2), 0x0007))))
-        local nmt_bank = self.nmt_ref[bit.band(bit.rshift(io_addr , 10) , 3)]
-        local nmt_idx = bit.band(io_addr , 0x03ff)
+        local io_addr = bit.bor(0x23c0 , bit.bor(bit.band(i , 0x0c00) , bit.bor(bit.band(bit.rshift(i , 4) , 0x0038) ,
+             bit.band(bit.rshift(i , 2), 0x0007))))
+        local nmt_bank = self.nmt_ref[bit.band(bit.rshift(io_addr , 10) , 3)+1]
+        local nmt_idx = bit.band(io_addr , 0x03ff)+1
         local attr_shift = bit.bor(bit.band(i , 2) , bit.band(bit.rshift(i , 4) , 4))
-        local key = {io_addr, attr_shift}
-        entries[key] or= [io_addr, TILE_LUT[bit.band(bit.rshift(nmt_bank[nmt_idx] , attr_shift) , 3)], attr_shift]
-        (((self.lut_update[nmt_bank] or= [])[nmt_idx] or= [nil, nil])[1] or= []) << entries[key]
+        local key = tostring(io_addr).."-"..tostring(attr_shift)
+        if not entries[key] then
+            entries[key] = {io_addr, PPU.TILE_LUT[bit.band(bit.rshift(nmt_bank[nmt_idx] , attr_shift) , 3)], attr_shift}
+        end
+        if not self.lut_update[nmt_bank] then
+            self.lut_update[nmt_bank] = {io_addr,
+                PPU.TILE_LUT[bit.band(bit.rshift(nmt_bank[nmt_idx] , attr_shift) , 3)], attr_shift}
+        end
+        if not self.lut_update[nmt_bank] then
+            self.lut_update[nmt_bank] = {}
+        end
+        if not self.lut_update[nmt_bank][nmt_idx] then
+            self.lut_update[nmt_bank][nmt_idx]  = {nil, nil}
+        end
+        if not self.lut_update[nmt_bank][nmt_idx][2] then
+            self.lut_update[nmt_bank][nmt_idx][2] = {}
+        end
+        self.lut_update[nmt_bank][nmt_idx][2][#(self.lut_update[nmt_bank][nmt_idx][2])] = entries[key]
+        --entries[key] or=
+        --(((self.lut_update[nmt_bank] or= [])[nmt_idx] or= [nil, nil])[1] or= []) << entries[key]
         return entries[key]
-      end.freeze
+      end)--.freeze
       -- FREZE WTF
       for i=1,#entries do
-
+        local a = entries[i]
+        entries[i] = UTILS.uniq(a)
       end
-      entries.each_value {|a| a.uniq! {|entry| entry.object_id } }
+
+      return entries
+      --entries.each_value {|a| a.uniq! {|entry| entry.object_id } }
     end
 
-    ------------------------------------------------------------------------------------------------------------------------------------------------------
+    --------------------------------------------------------------------------------------------------------------------
     -- other APIs
 
-    attr_reader :output_pixels
+    --attr_reader :output_pixels
 
     function PPU:set_chr_mem(mem, writable)
       self.chr_mem = mem
       self.chr_mem_writable = writable
     end
 
-    NMT_TABLE = {
-      horizontal:  [0, 0, 1, 1],
-      vertical:    [0, 1, 0, 1],
-      four_screen: [0, 1, 2, 3],
-      first:       [0, 0, 0, 0],
-      second:      [1, 1, 1, 1],
+    PPU.NMT_TABLE = {
+      horizontal=  {0, 0, 1, 1},
+      vertical=    {0, 1, 0, 1},
+      four_screen= {0, 1, 2, 3},
+      first=       {0, 0, 0, 0},
+      second=      {1, 1, 1, 1},
     }
-    function PPU:nametables=(mode)
-      update(PPU.RP2C02_CC)
-      idxs = NMT_TABLE[mode]
-      return if (0..3).all? {|i| self.nmt_ref[i].equal?(self.nmt_mem[idxs[i]]) }
+    function PPU:nametables(mode)
+        self:update(PPU.RP2C02_CC)
+        local idxs = PPU.NMT_TABLE[mode]
+        if all(range(0,3), function(i)
+            return self.nmt_ref[i] == self.nmt_mem[idxs[i]]
+            end) then
+            return
+        end
       self.nmt_ref[0] = self.nmt_mem[idxs[0]]
       self.nmt_ref[1] = self.nmt_mem[idxs[1]]
       self.nmt_ref[2] = self.nmt_mem[idxs[2]]
       self.nmt_ref[3] = self.nmt_mem[idxs[3]]
-      setup_lut
+      self:setup_lut()
     end
 
     function PPU:update(data_setup)
-      sync(data_setup + self.cpu.update)
+      return self:sync(data_setup + self.cpu:update())
     end
 
-    function PPU:setup_frame
-      self.output_pixels.clear
-      self.odd_frame = !self.odd_frame
-      self.vclk, self.hclk_target, self.cpu.next_frame_clock = self.hclk == HCLOCK_DUMMY ? DUMMY_FRAME : BOOT_FRAME
+    function PPU:setup_frame()
+        clear(self.output_pixels)
+      self.odd_frame = not self.odd_frame
+      local t  = self.hclk == PPU.HCLOCK_DUMMY and
+        PPU.DUMMY_FRAME or PPU.BOOT_FRAME
+        self.vclk, self.hclk_target, self.cpu.next_frame_clock = t[1],t[2],t[3]
     end
 
-    function PPU:vsync
-      if self.hclk_target ~= FOREVER_CLOCK
-        self.hclk_target = FOREVER_CLOCK
-        run
+    function PPU:vsync()
+      if self.hclk_target ~= CPU.FOREVER_CLOCK then
+        self.hclk_target = CPU.FOREVER_CLOCK
+        self:run()
       end
-      self.output_pixels << self.palette[15] while self.output_pixels.size < 256 * 240 -- fill black
+      while #(self.output_pixels) < 256 * 24 do
+      self.output_pixels[#(self.output_pixels)] = self.palette[15]  -- fill black
+      end
     end
 
     function PPU:monitor_a12_rising_edge(monitor)
       self.a12_monitor = monitor
     end
 
-    ------------------------------------------------------------------------------------------------------------------------------------------------------
+    --------------------------------------------------------------------------------------------------------------------
     -- helpers
 
-    function PPU:update_vram_addr
-      if self.vram_addr_inc == 32
-        if active?
-          if self.scroll_addr_5_14 & 0x7000 == 0x7000
-            self.scroll_addr_5_14 &= 0x0fff
-            case self.scroll_addr_5_14 & 0x03e0
-            when 0x03a0 then self.scroll_addr_5_14 ^= 0x0800
-            when 0x03e0 then self.scroll_addr_5_14 &= 0x7c00
-            else             self.scroll_addr_5_14 += 0x20
+    function PPU:update_vram_addr()
+      if self.vram_addr_inc == 32 then
+        if self:isactive() then
+          if bit.band(self.scroll_addr_5_14 , 0x7000) == 0x7000 then
+            self.scroll_addr_5_14 =bit.band(self.scroll_addr_5_14 , 0x0fff)
+            local x = bit.band(self.scroll_addr_5_14, 0x03e0)
+            if x == 0x03a0 then self.scroll_addr_5_14 = bit.bxor(self.scroll_addr_5_14,0x0800 )
+            elseif x==0x03e0 then self.scroll_addr_5_14 =bit.band(self.scroll_addr_5_14, 0x7c00)
+            else             self.scroll_addr_5_14 =self.scroll_addr_5_14 + 0x20
             end
           else
-            self.scroll_addr_5_14 += 0x1000
+            self.scroll_addr_5_14 =self.scroll_addr_5_14 + 0x1000
           end
         else
-          self.scroll_addr_5_14 += 0x20
+          self.scroll_addr_5_14 =self.scroll_addr_5_14 + 0x20
         end
-      elseif self.scroll_addr_0_4 < 0x1f
-        self.scroll_addr_0_4 += 1
+      elseif self.scroll_addr_0_4 < 0x1f then
+        self.scroll_addr_0_4 =self.scroll_addr_0_4 + 1
       else
         self.scroll_addr_0_4 = 0
-        self.scroll_addr_5_14 += 0x20
+        self.scroll_addr_5_14 =self.scroll_addr_5_14+ 0x20
       end
-      update_scroll_address_line
+      return self:update_scroll_address_line()
     end
 
-    function PPU:update_scroll_address_line
-      self.name_io_addr = (self.scroll_addr_0_4 | self.scroll_addr_5_14) & 0x0fff | 0x2000
-      if self.a12_monitor
-        a12_state = self.scroll_addr_5_14 & 0x3000 == 0x1000
-        self.a12_monitor.a12_signaled(self.cpu.current_clock) if !self.a12_state and a12_state
+    function PPU:update_scroll_address_line()
+      self.name_io_addr = bit.bor(bit.band(bit.bor(self.scroll_addr_0_4 , self.scroll_addr_5_14) , 0x0fff) , 0x2000)
+      if self.a12_monitor then
+        local a12_state = bit.band(self.scroll_addr_5_14 , 0x3000) == 0x1000
+        if not self.a12_state and a12_state then self.a12_monitor.a12_signaled(self.cpu.current_clock) end
         self.a12_state = a12_state
       end
     end
 
-    function PPU:active?
-      self.scanline ~= SCANLINE_VBLANK and self.any_show
+    function PPU:isactive()
+      return self.scanline ~= PPU.SCANLINE_VBLANK and self.any_show
     end
 
     function PPU:sync(elapsed)
-      return unless self.hclk_target < elapsed
+      if not (self.hclk_target < elapsed) then return end
       self.hclk_target = elapsed / PPU.RP2C02_CC - self.vclk
-      run
+      return self:run()
     end
 
-    function PPU:make_sure_invariants
-      self.name_io_addr = (self.scroll_addr_0_4 | self.scroll_addr_5_14) & 0x0fff | 0x2000
-      self.bg_pattern_lut_fetched = TILE_LUT[
-        self.nmt_ref[self.io_addr >> 10 & 3][self.io_addr & 0x03ff] >> ((self.scroll_addr_0_4 & 0x2) | (self.scroll_addr_5_14[6] * 0x4)) & 3
+    function PPU:make_sure_invariants()
+      self.name_io_addr = bit.bor(bit.band(bit.bor(self.scroll_addr_0_4 , self.scroll_addr_5_14) , 0x0fff) , 0x2000)
+      self.bg_pattern_lut_fetched = PPU.TILE_LUT[
+        bit.band(bit.rshift(self.nmt_ref[bit.band(bit.rshift(self.io_addr, 10) , 3)][bit.band(self.io_addr , 0x03ff)],
+            bit.bor(bit.band(self.scroll_addr_0_4 , 0x2) , (self.scroll_addr_5_14[6] * 0x4))) , 3)
       ]
     end
 
     function PPU:io_latch_mask(data)
-      if active?
-        0xff
-      elseif self.regs_oam & 0x03 == 0x02
-        data & 0xe3
+      if self:isactive() then
+        return 0xff
+      elseif bit.band(self.regs_oam , 0x03) == 0x02 then
+        return bit.band(data , 0xe3)
       else
-        data
+        return data
       end
     end
 
-    ------------------------------------------------------------------------------------------------------------------------------------------------------
+    --------------------------------------------------------------------------------------------------------------------
     -- mapped memory handlers
 
     -- PPUCTRL
     function PPU:poke_2000(_addr, data)
-      update(PPU.RP2C02_CC)
-      need_nmi_old = self.need_nmi
+      self:update(PPU.RP2C02_CC)
+      local need_nmi_old = self.need_nmi
 
-      self.scroll_latch    = (self.scroll_latch & 0x73ff) | (data & 0x03) << 10
-      self.vram_addr_inc   = data[2] == 1 ? 32 : 1
-      self.sp_base         = data[3] == 1 ? 0x1000 : 0x0000
-      self.bg_pattern_base = data[4] == 1 ? 0x1000 : 0x0000
-      self.sp_height       = data[5] == 1 ? 16 : 8
+      self.scroll_latch    = bit.bor(bit.band(self.scroll_latch , 0x73ff) , bit.lshift(bit.band(data , 0x03) , 10))
+      self.vram_addr_inc   = data[2] == 1 and 32 or 1
+      self.sp_base         = data[3] == 1 and 0x1000 or 0x0000
+      self.bg_pattern_base = data[4] == 1 and 0x1000 or 0x0000
+      self.sp_height       = data[5] == 1 and 16 or 8
       self.need_nmi        = data[7] == 1
 
       self.io_latch = data
-      self.pattern_end = self.sp_base ~= 0 or self.sp_height == 16 ? 0x1ff0 : 0x0ff0
-      self.bg_pattern_base_15 = self.bg_pattern_base[12] << 15
+      self.pattern_end = self.sp_base ~= 0 or self.sp_height == 16 and 0x1ff0 or 0x0ff0
+      self.bg_pattern_base_15 = bit.lshift(self.bg_pattern_base[12], 15)
 
-      if self.need_nmi and self.vblank and !need_nmi_old
-        clock = self.cpu.current_clock + PPU.RP2C02_CC
-        self.cpu.do_nmi(clock) if clock < RP2C02_HVINT
+      if self.need_nmi and self.vblank and not need_nmi_old then
+        local clock = self.cpu.current_clock + PPU.RP2C02_CC
+        if clock < PPU.RP2C02_HVINT then self.cpu:do_nmi(clock)  end
       end
     end
 
@@ -374,7 +428,7 @@ PPU._mt = {__index = PPU}
       self.sp_show_edge = data[2] == 1 and self.sp_show
       self.any_show = self.bg_show or self.sp_show
       self.coloring = data[0] == 1 and 0x30 or 0x3f -- 0x30: monochrome
-      self.emphasis = (data & 0xe0) << 1
+      self.emphasis = bit.lshift(bit.band(data , 0xe0) , 1)
 
       self.io_latch = data
 
@@ -395,10 +449,10 @@ PPU._mt = {__index = PPU}
     -- PPUSTATUS
     function PPU:peek_2002(_addr)
       self:update(PPU.RP2C02_CC)
-      local v = self.io_latch & 0x1f
-      if self.vblank then v |= 0x80 end
-      if self.sp_zero_hit then v |= 0x40 end
-      if self.sp_overflow then v |= 0x20 end
+      local v = bit.band(self.io_latch, 0x1f)
+      if self.vblank then v = bit.bor(v,0x80) end
+      if self.sp_zero_hit then v = bit.bor(v,0x40) end
+      if self.sp_overflow then v = bit.bor(v,0x20) end
       self.io_latch = v
       self.scroll_toggle = false
       self.vblanking = false
@@ -415,15 +469,15 @@ PPU._mt = {__index = PPU}
 
     -- OAMDATA (write)
     function PPU:poke_2004(_addr, data)
-      update(PPU.RP2C02_CC)
-      self.sp_ram[self.regs_oam] = io_latch_mask(data)
+      self:update(PPU.RP2C02_CC)
+      self.sp_ram[self.regs_oam] = self:io_latch_mask(data)
       self.io_latch = self.sp_ram[self.regs_oam]
       self.regs_oam = bit.band(self.regs_oam + 1, 0xff)
     end
 
     -- OAMDATA (read)
     function PPU:peek_2004(_addr)
-      if notself.any_show or self.cpu.current_clock - (self.cpu.next_frame_clock - (341 * 241) * PPU.RP2C02_CC) >= (341 * 240) * PPU.RP2C02_CC then
+      if not self.any_show or self.cpu.current_clock - (self.cpu.next_frame_clock - (341 * 241) * PPU.RP2C02_CC) >= (341 * 240) * PPU.RP2C02_CC then
         self.io_latch = self.sp_ram[self.regs_oam]
       else
         self:update(PPU.RP2C02_CC)
@@ -435,11 +489,11 @@ PPU._mt = {__index = PPU}
     function PPU:poke_2005(_addr, data)
       self:update(PPU.RP2C02_CC)
       self.io_latch = data
-      self.scroll_toggle = !self.scroll_toggle
+      self.scroll_toggle = not self.scroll_toggle
       if self.scroll_toggle then
-        self.scroll_latch = self.scroll_latch & 0x7fe0 | (data >> 3)
-        xfine = 8 - bit.band(data, 0x7)
-        self.bg_pixels.rotate!(self.scroll_xfine - xfine)
+        self.scroll_latch = bit.bor(bit.band(self.scroll_latch , 0x7fe0) ,bit.rshift (data ,3))
+local        xfine = 8 - bit.band(data, 0x7)
+        self.bg_pixels = rotate(self.bg_pixels, self.scroll_xfine - xfine)
         self.scroll_xfine = xfine
       else
         self.scroll_latch = bit.bor(bit.band(self.scroll_latch , 0x0c1f) , bit.bor(bit.lshift(data , 2) , bit.band(bit.lshift(data , 12)) , 0x73e0))
@@ -468,7 +522,7 @@ PPU._mt = {__index = PPU}
       self:update_vram_addr()
       self.io_latch = data
       if bit.band(addr , 0x3f00) == 0x3f00 then
-        addr &= 0x1f
+        addr =bit.band(addr , 0x1f)
         local final = self.palette[bit.bor(bit.band(data , self.coloring) , self.emphasis)]
         self.palette_ram[addr] = data
         self.output_color[addr] = final
@@ -476,18 +530,28 @@ PPU._mt = {__index = PPU}
           self.palette_ram[addr ^ 0x10] = data
           self.output_color[addr ^ 0x10] = final
         end
-        self.output_bg_color = bit.band(self.palette_ram[0] , 0x3f
+        self.output_bg_color = bit.band(self.palette_ram[0] , 0x3f)
       else
-        addr =bit.band*addr, 0x3fff)
+        addr =bit.band(addr, 0x3fff)
         if addr >= 0x2000 then
-          nmt_bank = self.nmt_ref[bit.band(bit.rshift(addr , 10) , 0x3)]
-          nmt_idx = bit.band(addr , 0x03ff)
+          local nmt_bank = self.nmt_ref[bit.band(bit.rshift(addr , 10) , 0x3)]
+          local nmt_idx = bit.band(addr , 0x03ff)
           if nmt_bank[nmt_idx] ~= data then
             nmt_bank[nmt_idx] = data
-
-            name_lut_update, attr_lut_update = self.lut_update[nmt_bank][nmt_idx]
-             if name_lut_update then name_lut_update.each {|i, b| self.name_lut[i] = data << 4 | b } end
-             if attr_lut_update then attr_lut_update.each {|a| a[1] = TILE_LUT[data >> a[2] & 3] } end
+            local t = self.lut_update[nmt_bank][nmt_idx]
+            local name_lut_update, attr_lut_update = t[1], t[2]
+             if name_lut_update then 
+            for i=1,#name_lut_update do
+                --TODO:THIS
+                self.name_lut[i] =  bit.bor(bit.lshift(data , 4) , b)
+            end
+                --name_lut_update.each {|i, b| self.name_lut[i] = bit.bor(bit.lshift(data , 4) , b) } 
+            end
+             if attr_lut_update then 
+            for i=1,#attr_lut_update do
+            end
+                --attr_lut_update.each {|a| a[1] = PPU.TILE_LUT[bit.band(bit.rshift(data , a[2]) , 3)] } 
+            end
           end
         elseif self.chr_mem_writable then
           self.chr_mem[addr] = data
@@ -498,11 +562,11 @@ PPU._mt = {__index = PPU}
     -- PPUDATA (read)
     function PPU:peek_2007(_addr)
       self:update(PPU.RP2C02_CC)
-      addr = (self.scroll_addr_0_4 | self.scroll_addr_5_14) & 0x3fff
-      update_vram_addr
-      self.io_latch = (addr & 0x3f00) ~= 0x3f00 ? self.io_buffer : self.palette_ram[addr & 0x1f] & self.coloring
-      self.io_buffer = addr >= 0x2000 ? self.nmt_ref[addr >> 10 & 0x3][addr & 0x3ff] : self.chr_mem[addr]
-      self.io_latch
+      local addr = bit.band(bit.bor(self.scroll_addr_0_4 , self.scroll_addr_5_14) , 0x3fff)
+      self:update_vram_addr()
+      self.io_latch = bit.band(addr , 0x3f00) ~= 0x3f00 and self.io_buffer or bit.band(self.palette_ram[bit.band(addr , 0x1f)] , self.coloring)
+      self.io_buffer = addr >= 0x2000 and self.nmt_ref[bit.band(bit.rshift(addr , 10) , 0x3)][bit.band(addr , 0x3ff)] or self.chr_mem[addr]
+      return self.io_latch
     end
 
     function PPU:poke_2xxx(_addr, data)
@@ -510,32 +574,32 @@ PPU._mt = {__index = PPU}
     end
 
     function PPU:peek_2xxx(_addr)
-      self.io_latch
+      return self.io_latch
     end
 
     function PPU:peek_3000(_addr)
-      update(PPU.RP2C02_CC)
-      self.io_latch
+      self:update(PPU.RP2C02_CC)
+      return self.io_latch
     end
 
     -- OAMDMA
     function PPU:poke_4014(_addr, data) -- DMA
-       if self.cpu.odd_clock? then self.cpu.steal_clocks(CPU.CLK_1) end
+       if self.cpu:odd_clock() then self.cpu:steal_clocks(CPU.CLK_1) end
       self:update(PPU.RP2C02_CC)
-      self.cpu.steal_clocks(CPU.CLK_1)
+      self.cpu:steal_clocks(CPU.CLK_1)
       data =bit.lshift(data, 8)
-      if self.regs_oam == 0 and data < 0x2000 and ((not self.any_show) or self.cpu.current_clock <= RP2C02_HVINT - CPU.CLK_1 * 512) then
-        self.cpu.steal_clocks(CPU.CLK_1 * 512)
-        self.cpu.sprite_dma(bit.band(data , 0x7ff), self.sp_ram)
+      if self.regs_oam == 0 and data < 0x2000 and ((not self.any_show) or self.cpu.current_clock <= PPU.RP2C02_HVINT - CPU.CLK_1 * 512) then
+        self.cpu:steal_clocks(CPU.CLK_1 * 512)
+        self.cpu:sprite_dma(bit.band(data , 0x7ff), self.sp_ram)
         self.io_latch = self.sp_ram[0xff]
       else
         repeat
-          self.io_latch = self.cpu.fetch(data)
+          self.io_latch = self.cpu:fetch(data)
           data =data+ 1
-          self.cpu.steal_clocks(CPU.CLK_1)
-          elf:update(PPU.RP2C02_CC)
-          self.cpu.steal_clocks(CPU.CLK_1)
-          self.io_latch = io_latch_mask(self.io_latch)
+          self.cpu:steal_clocks(CPU.CLK_1)
+          self:update(PPU.RP2C02_CC)
+          self.cpu:steal_clocks(CPU.CLK_1)
+          self.io_latch = self:io_latch_mask(self.io_latch)
           self.sp_ram[self.regs_oam] = self.io_latch
           self.regs_oam = bit.band(self.regs_oam + 1, 0xff)
         until bit.band(data , 0xff) ~= 0
@@ -553,31 +617,34 @@ PPU._mt = {__index = PPU}
     -- OptimizedCodeBuilder (e.g., do not change the parameter names blindly).
 
     function PPU:open_pattern(exp)
-      return unless self.any_show
+if not self.any_show then       return end 
       self.io_addr = exp
-      update_address_line
+return       self:update_address_line()
     end
 
     function PPU:open_sprite(buffer_idx)
-      flip_v = self.sp_buffer[buffer_idx + 2][7] -- OAM byte2 bit7: "Flip vertically" flag
-      tmp = (self.scanline - self.sp_buffer[buffer_idx]) ^ (flip_v * 0xf)
-      byte1 = self.sp_buffer[buffer_idx + 1]
-      addr = self.sp_height == 16 ? ((byte1 & 0x01) << 12) | ((byte1 & 0xfe) << 4) | (tmp[3] * 0x10) : self.sp_base | byte1 << 4
-      addr | (tmp & 7)
+      local flip_v = self.sp_buffer[buffer_idx + 2][7] -- OAM byte2 bit7: "Flip vertically" flag
+      local tmp = (self.scanline - self.sp_buffer[buffer_idx]) ^ (flip_v * 0xf)
+      local byte1 = self.sp_buffer[buffer_idx + 1]
+      local addr = self.sp_height == 16 and bit.bor(bit.lshift(bit.band(byte1 , 0x01) , 12) , bit.bor(bit.lshift(bit.band(byte1 , 0xfe) , 4) , (tmp[3] * 0x10))) or bit.bor(self.sp_base ,bit.lshift( byte1 , 4))
+      return bit.bor(addr , bit.band(tmp , 7))
     end
 
     function PPU:load_sprite(pat0, pat1, buffer_idx)
-      byte2 = self.sp_buffer[buffer_idx + 2]
-      pos = SP_PIXEL_POSITIONS[byte2[6]] -- OAM byte2 bit6: "Flip horizontally" flag
-      pat = (pat0 >> 1 & 0x55) | (pat1 & 0xaa) | ((pat0 & 0x55) | (pat1 << 1 & 0xaa)) << 8
-      x_base = self.sp_buffer[buffer_idx + 3]
-      palette_base = 0x10 + ((byte2 & 3) << 2) -- OAM byte2 bit0-1: Palette
-      self.sp_visible or= self.sp_map.clear
-      8.times do |dx|
-        x = x_base + dx
-        clr = (pat >> (pos[dx] * 2)) & 3
-        next if self.sp_map[x] or clr == 0
-        self.sp_map[x] = sprite = self.sp_map_buffer[x]
+      local byte2 = self.sp_buffer[buffer_idx + 2]
+      local pos = PPU.SP_PIXEL_POSITIONS[byte2[6]] -- OAM byte2 bit6: "Flip horizontally" flag
+      local pat = bit.bor(bit.bor(bit.bor(bit.band(bit.rshift(pat0 , 1) , 0x55), bit.band(pat1 , 0xaa)) , (bit.band(pat0 , 0x55)), bit.lshift(bit.band(bit.lshift(pat1 , 1) , 0xaa)) , 8))
+      local x_base = self.sp_buffer[buffer_idx + 3]
+      local palette_base = 0x10 + bit.lshift(bit.band(byte2 ,3) , 2) -- OAM byte2 bit0-1: Palette
+      if not self.sp_visible then
+        self.sp_visible = self.sp_map.clear
+      end
+      for i=1,8 do
+        local x = x_base + i
+        local clr = bit.band(bit.rshift(pat , (pos[i+1] * 2)) , 3)
+        if self.sp_map[x] or clr == 0 then self:next () end
+        local sprite = self.sp_map_buffer[x]
+        self.sp_map[x] = sprite
         -- sprite[0]: behind flag, sprite[1]: zero hit flag, sprite[2]: color
         sprite[0] = byte2[5] == 1 -- OAM byte2 bit5: "Behind background" flag
         sprite[1] = buffer_idx == 0 and self.sp_zero_in_line
@@ -586,10 +653,10 @@ PPU._mt = {__index = PPU}
       self.sp_active = self.sp_enabled
     end
 
-    function PPU:update_address_line
-      if self.a12_monitor
-        a12_state = self.io_addr[12] == 1
-        self.a12_monitor.a12_signaled((self.vclk + self.hclk) * PPU.RP2C02_CC) if !self.a12_state and a12_state
+    function PPU:update_address_line()
+      if self.a12_monitor then
+        local a12_state = self.io_addr[12] == 1
+        if not self.a12_state and a12_state then self.a12_monitor.a12_signaled((self.vclk + self.hclk) * PPU.RP2C02_CC) end
         self.a12_state = a12_state
       end
     end
@@ -597,158 +664,169 @@ PPU._mt = {__index = PPU}
     ------------------------------------------------------------------------------------------------------------------------------------------------------
     -- actions for PPU--run
 
-    function PPU:open_name
-      return unless self.any_show
+    function PPU:open_name()
+      if not self.any_show then return end 
       self.io_addr = self.name_io_addr
-      update_address_line
+      return self:update_address_line()
     end
 
-    function PPU:fetch_name
-      return unless self.any_show
+    function PPU:fetch_name()
+      if not self.any_show then return end 
       self.io_pattern = self.name_lut[self.scroll_addr_0_4 + self.scroll_addr_5_14 + self.bg_pattern_base_15]
     end
 
-    function PPU:open_attr
-      return unless self.any_show
-      self.io_addr, self.bg_pattern_lut_fetched, = self.attr_lut[self.scroll_addr_0_4 + self.scroll_addr_5_14]
-      update_address_line
+    function PPU:open_attr()
+      if not self.any_show then return end 
+      local t = self.attr_lut[self.scroll_addr_0_4 + self.scroll_addr_5_14]
+      self.io_addr, self.bg_pattern_lut_fetched = t[1], t[2]
+      return self:update_address_line()
     end
 
-    function PPU:fetch_attr
-      return unless self.any_show
+    function PPU:fetch_attr()
+      if not  self.any_show then return end
       self.bg_pattern_lut = self.bg_pattern_lut_fetched
       -- raise unless self.bg_pattern_lut_fetched ==
       --   self.nmt_ref[self.io_addr >> 10 & 3][self.io_addr & 0x03ff] >>
       --     ((self.scroll_addr_0_4 & 0x2) | (self.scroll_addr_5_14[6] * 0x4)) & 3
     end
 
-    function PPU:fetch_bg_pattern_0
-      return unless self.any_show
-      self.bg_pattern = self.chr_mem[self.io_addr & 0x1fff]
+    function PPU:fetch_bg_pattern_0()
+      if not self.any_show then return end
+      self.bg_pattern = self.chr_mem[bit.band(self.io_addr , 0x1fff)]
     end
 
-    function PPU:fetch_bg_pattern_1
-      return unless self.any_show
-      self.bg_pattern |= self.chr_mem[self.io_addr & 0x1fff] * 0x100
-    end
-
-    function PPU:scroll_clock_x
-      return unless self.any_show
-      if self.scroll_addr_0_4 < 0x001f
-        self.scroll_addr_0_4 += 1
-        self.name_io_addr += 1 -- make cache consistent
-      else
-        self.scroll_addr_0_4 = 0
-        self.scroll_addr_5_14 ^= 0x0400
-        self.name_io_addr ^= 0x041f -- make cache consistent
+    function PPU:fetch_bg_pattern_1()
+      if not self.any_show then return end
+      if not self.bg_pattern  then
+      self.bg_pattern = self.chr_mem[bit.band(self.io_addr , 0x1fff)] * 0x100
       end
     end
 
-    function PPU:scroll_reset_x
-      return unless self.any_show
-      self.scroll_addr_0_4 = self.scroll_latch & 0x001f
-      self.scroll_addr_5_14 = (self.scroll_addr_5_14 & 0x7be0) | (self.scroll_latch & 0x0400)
-      self.name_io_addr = (self.scroll_addr_0_4 | self.scroll_addr_5_14) & 0x0fff | 0x2000 -- make cache consistent
+    function PPU:scroll_clock_x()
+      if not self.any_show then return end
+      if self.scroll_addr_0_4 < 0x001f then 
+        self.scroll_addr_0_4 =self.scroll_addr_0_4 + 1
+        self.name_io_addr =self.name_io_addr + 1 -- make cache consistent
+      else
+        self.scroll_addr_0_4 = 0
+        self.scroll_addr_5_14 =self.scroll_addr_5_14 ^ 0x0400
+        self.name_io_addr =  self.name_io_addr ^ 0x041f -- make cache consistent
+      end
     end
 
-    function PPU:scroll_clock_y
-      return unless self.any_show
-      if self.scroll_addr_5_14 & 0x7000 ~= 0x7000
-        self.scroll_addr_5_14 += 0x1000
+    function PPU:scroll_reset_x()
+      if not self.any_show then return end
+      self.scroll_addr_0_4 = bit.band(bit.band(self.scroll_latch , 0x001f))
+      self.scroll_addr_5_14 = bit.bor(bit.band(self.scroll_addr_5_14, 0x7be0) ,bit.band (self.scroll_latch, 0x0400))
+      self.name_io_addr = bit.bor(bit.band(bit.bor(self.scroll_addr_0_4 , self.scroll_addr_5_14) , 0x0fff) , 0x2000) -- make cache consistent
+    end
+
+    function PPU:scroll_clock_y()
+      if not self.any_show then return end
+      if bit.band(self.scroll_addr_5_14 , 0x7000) ~= 0x7000 then
+        self.scroll_addr_5_14 =self.scroll_addr_5_14 + 0x1000
       else
-        mask = self.scroll_addr_5_14 & 0x03e0
-        if mask == 0x03a0
-          self.scroll_addr_5_14 ^= 0x0800
-          self.scroll_addr_5_14 &= 0x0c00
-        elseif mask == 0x03e0
-          self.scroll_addr_5_14 &= 0x0c00
+        local mask = bit.band (self.scroll_addr_5_14 ,0x03e0)
+        if mask == 0x03a0 then
+          self.scroll_addr_5_14 =self.scroll_addr_5_14 ^ 0x0800
+          self.scroll_addr_5_14 =bit.band(self.scroll_addr_5_14 , 0x0c00)
+        elseif mask == 0x03e0 then
+          self.scroll_addr_5_14 =bit.band(self.scroll_addr_5_14 , 0x0c00)
         else
-          self.scroll_addr_5_14 = (self.scroll_addr_5_14 & 0x0fe0) + 32
+          self.scroll_addr_5_14 = bit.band(self.scroll_addr_5_14 , 0x0fe0) + 32
         end
       end
 
-      self.name_io_addr = (self.scroll_addr_0_4 | self.scroll_addr_5_14) & 0x0fff | 0x2000 -- make cache consistent
+      self.name_io_addr = bit.bor(bit.band(bit.bor(self.scroll_addr_0_4 , self.scroll_addr_5_14) , 0x0fff) , 0x2000) -- make cache consistent
     end
 
-    function PPU:preload_tiles
-      return unless self.any_show
-      self.bg_pixels[self.scroll_xfine, 8] = self.bg_pattern_lut[self.bg_pattern]
+    function PPU:preload_tiles()
+      if not self.any_show then return end 
+      local patt = self.bg_pattern_lut[self.bg_pattern]
+      for i = self.scroll_xfine,self.scroll_xfine+8 do
+      self.bg_pixels[i] = patt[i-self.scroll_xfine+1]
+      end
     end
 
-    function PPU:load_tiles
-      return unless self.any_show
-      self.bg_pixels.rotate!(8)
-      self.bg_pixels[self.scroll_xfine, 8] = self.bg_pattern_lut[self.bg_pattern]
+    function PPU:load_tiles()
+      if not self.any_show then return end 
+        self.bg_pixels = rotate(self.bg_pixels, 8)
+      local patt = self.bg_pattern_lut[self.bg_pattern]
+      for i = self.scroll_xfine,self.scroll_xfine+8 do
+      self.bg_pixels[i] = patt[i-self.scroll_xfine+1]
+      end
     end
 
-    function PPU:evaluate_sprites_even
-      return unless self.any_show
+    function PPU:evaluate_sprites_even()
+      if not self.any_show then return end 
       self.sp_latch = self.sp_ram[self.sp_addr]
     end
 
-    function PPU:evaluate_sprites_odd
-      return unless self.any_show
+    function PPU:evaluate_sprites_odd()
+      if not self.any_show then return end 
 
       -- we first check phase 1 since it is the most-likely case
-      if self.sp_phase -- nil represents phase 1
+      if self.sp_phase then-- nil represents phase 1
         -- the second most-likely case is phase 9
-        if self.sp_phase == 9
-          evaluate_sprites_odd_phase_9
+        if self.sp_phase == 9 then
+          self:evaluate_sprites_odd_phase_9()
         else
           -- other cases are relatively rare
-          case self.sp_phase
+          local x = self.sp_phase
           -- when 1 then evaluate_sprites_odd_phase_1
           -- when 9 then evaluate_sprites_odd_phase_9
-          when 2 then evaluate_sprites_odd_phase_2
-          when 3 then evaluate_sprites_odd_phase_3
-          when 4 then evaluate_sprites_odd_phase_4
-          when 5 then evaluate_sprites_odd_phase_5
-          when 6 then evaluate_sprites_odd_phase_6
-          when 7 then evaluate_sprites_odd_phase_7
-          when 8 then evaluate_sprites_odd_phase_8
+          if x == 2 then self:evaluate_sprites_odd_phase_2()
+          elseif x ==  3 then self:evaluate_sprites_odd_phase_3()
+          elseif x ==  4 then self:evaluate_sprites_odd_phase_4()
+          elseif x ==  5 then self:evaluate_sprites_odd_phase_5()
+          elseif x ==  6 then self:evaluate_sprites_odd_phase_6()
+          elseif x ==  7 then self:evaluate_sprites_odd_phase_7()
+          elseif x ==  8 then self:evaluate_sprites_odd_phase_8()
           end
         end
       else
-        evaluate_sprites_odd_phase_1
+        self:evaluate_sprites_odd_phase_1()
       end
     end
 
-    function PPU:evaluate_sprites_odd_phase_1
-      self.sp_index += 1
-      if self.sp_latch <= self.scanline and self.scanline < self.sp_latch + self.sp_height
-        self.sp_addr += 1
+    function PPU:evaluate_sprites_odd_phase_1()
+      self.sp_index =self.sp_index + 1
+      if self.sp_latch <= self.scanline and self.scanline < self.sp_latch + self.sp_height then
+        self.sp_addr =self.sp_addr + 1
         self.sp_phase = 2
         self.sp_buffer[self.sp_buffered] = self.sp_latch
-      elseif self.sp_index == 64
+      elseif self.sp_index == 64 then
         self.sp_addr = 0
         self.sp_phase = 9
-      elseif self.sp_index == 2
+      elseif self.sp_index == 2 then
         self.sp_addr = 8
       else
-        self.sp_addr += 4
+        self.sp_addr =self.sp_addr + 4
       end
     end
 
-    function PPU:evaluate_sprites_odd_phase_2
-      self.sp_addr += 1
+    function PPU:evaluate_sprites_odd_phase_2()
+      self.sp_addr =self.sp_addr + 1
       self.sp_phase = 3
       self.sp_buffer[self.sp_buffered + 1] = self.sp_latch
     end
 
-    function PPU:evaluate_sprites_odd_phase_3
-      self.sp_addr += 1
+    function PPU:evaluate_sprites_odd_phase_3()
+      self.sp_addr =self.sp_addr + 1
       self.sp_phase = 4
       self.sp_buffer[self.sp_buffered + 2] = self.sp_latch
     end
 
-    function PPU:evaluate_sprites_odd_phase_4
+    function PPU:evaluate_sprites_odd_phase_4()
       self.sp_buffer[self.sp_buffered + 3] = self.sp_latch
-      self.sp_buffered += 4
-      if self.sp_index ~= 64
-        self.sp_phase = self.sp_buffered ~= self.sp_limit ? nil : 5
-        if self.sp_index ~= 2
-          self.sp_addr += 1
-          self.sp_zero_in_line or= self.sp_index == 1
+      self.sp_buffered =self.sp_buffered + 4
+      if self.sp_index ~= 64 then
+        self.sp_phase = self.sp_buffered ~= self.sp_limit and nil or 5
+        if self.sp_index ~= 2 then
+          self.sp_addr =self.sp_addr + 1
+          if not self.sp_zero_in_line then
+            self.sp_zero_in_line = self.sp_index == 1
+          end
         else
           self.sp_addr = 8
         end
@@ -758,112 +836,121 @@ PPU._mt = {__index = PPU}
       end
     end
 
-    function PPU:evaluate_sprites_odd_phase_5
-      if self.sp_latch <= self.scanline and self.scanline < self.sp_latch + self.sp_height
+    function PPU:evaluate_sprites_odd_phase_5()
+      if self.sp_latch <= self.scanline and self.scanline < self.sp_latch + self.sp_height then
         self.sp_phase = 6
-        self.sp_addr = (self.sp_addr + 1) & 0xff
+        self.sp_addr = bit.band(self.sp_addr + 1, 0xff)
         self.sp_overflow = true
       else
-        self.sp_addr = ((self.sp_addr + 4) & 0xfc) + ((self.sp_addr + 1) & 3)
-        if self.sp_addr <= 5
+        self.sp_addr = bit.band((self.sp_addr + 4) , 0xfc) + bit.band((self.sp_addr + 1) , 3)
+        if self.sp_addr <= 5 then
           self.sp_phase = 9
-          self.sp_addr &= 0xfc
+          self.sp_addr =bit.band(self.sp_addr , 0xfc)
         end
       end
     end
 
-    function PPU:evaluate_sprites_odd_phase_6
+    function PPU:evaluate_sprites_odd_phase_6()
       self.sp_phase = 7
-      self.sp_addr = (self.sp_addr + 1) & 0xff
+      self.sp_addr = bit.band(self.sp_addr + 1, 0xff)
     end
 
-    function PPU:evaluate_sprites_odd_phase_7
+    function PPU:evaluate_sprites_odd_phase_7()
       self.sp_phase = 8
-      self.sp_addr = (self.sp_addr + 1) & 0xff
+      self.sp_addr = bit.band(self.sp_addr + 1, 0xff)
     end
 
-    function PPU:evaluate_sprites_odd_phase_8
+    function PPU:evaluate_sprites_odd_phase_8()
       self.sp_phase = 9
-      self.sp_addr = (self.sp_addr + 1) & 0xff
-      self.sp_addr += 1 if self.sp_addr & 3 == 3
-      self.sp_addr &= 0xfc
+      self.sp_addr = bit.band(self.sp_addr + 1 , 0xff)
+        if bit.band(self.sp_addr , 3) == 3 then
+      self.sp_addr =self.sp_addr + 1 
+    end
+      self.sp_addr =bit.band(self.sp_addr , 0xfc)
     end
 
-    function PPU:evaluate_sprites_odd_phase_9
-      self.sp_addr = (self.sp_addr + 4) & 0xff
+    function PPU:evaluate_sprites_odd_phase_9()
+      self.sp_addr = bit.band(self.sp_addr + 4 , 0xff)
     end
 
-    function PPU:load_extended_sprites
-      return unless self.any_show
-      if 32 < self.sp_buffered
-        buffer_idx = 32
-        begin
-          addr = open_sprite(buffer_idx)
-          pat0 = self.chr_mem[addr]
-          pat1 = self.chr_mem[addr | 8]
-          load_sprite(pat0, pat1, buffer_idx) if pat0 ~= 0 or pat1 ~= 0
-          buffer_idx += 4
-        end while buffer_idx ~= self.sp_buffered
+    function PPU:load_extended_sprites()
+if not self.any_show then       return end 
+      if 32 < self.sp_buffered then
+        local buffer_idx = 32
+        repeat
+          local addr = self:open_sprite(buffer_idx)
+          local pat0 = self.chr_mem[addr]
+          local pat1 = self.chr_mem[bit.bor(addr , 8)]
+          if pat0 ~= 0 or pat1 ~= 0 then self:load_sprite(pat0, pat1, buffer_idx) end
+          buffer_idx =buffer_idx+ 4
+        until buffer_idx ~= self.sp_buffered
       end
     end
 
-    function PPU:render_pixel
-      if self.any_show
-        pixel = self.bg_enabled ? self.bg_pixels[self.hclk % 8] : 0
-        if self.sp_active and (sprite = self.sp_map[self.hclk])
-          if pixel % 4 == 0
+    function PPU:render_pixel()
+        local pixel
+      if self.any_show then
+        pixel = self.bg_enabled  and self.bg_pixels[self.hclk % 8+1] or 0
+        local bool = self.sp_active
+        local sprite
+        if bool then
+            sprite = self.sp_map[self.hclk]
+            bool = sprite
+        end
+        if bool then
+          if pixel % 4 == 0 then
             pixel = sprite[2]
           else
-            self.sp_zero_hit = true if sprite[1] and self.hclk ~= 255
-            pixel = sprite[2] unless sprite[0]
+            if sprite[1] and self.hclk ~= 255 then self.sp_zero_hit = true end
+            if not sprite[0] then pixel = sprite[2] end 
           end
         end
       else
-        pixel = self.scroll_addr_5_14 & 0x3f00 == 0x3f00 ? self.scroll_addr_0_4 : 0
-        self.bg_pixels[self.hclk % 8] = 0
+        pixel = bit.band(self.scroll_addr_5_14 , 0x3f00) == 0x3f00 and self.scroll_addr_0_4 or 0
+        self.bg_pixels[self.hclk % 8+1] = 0
       end
-      self.output_pixels << self.output_color[pixel]
+      return bit.lshift(self.output_pixels, self.output_color[pixel])
     end
 
     -- just a placeholder; used for batch_render_pixels optimization
-    function PPU:batch_render_eight_pixels
+    function PPU:batch_render_eight_pixels()
     end
 
-    function PPU:boot
+    function PPU:boot()
       self.vblank = true
-      self.hclk = HCLOCK_DUMMY
-      self.hclk_target = FOREVER_CLOCK
+      self.hclk = PPU.HCLOCK_DUMMY
+      self.hclk_target = CPU.FOREVER_CLOCK
     end
 
-    function PPU:vblank_0
+    function PPU:vblank_0()
       self.vblanking = true
-      self.hclk = HCLOCK_VBLANK_1
+      self.hclk = PPU.HCLOCK_VBLANK_1
     end
 
-    function PPU:vblank_1
-      self.vblank or= self.vblanking
+    function PPU:vblank_1()
+      if not self.vblank then self.vblank = self.vblanking end
       self.vblanking = false
       self.sp_visible = false
       self.sp_active = false
-      self.hclk = HCLOCK_VBLANK_2
+      self.hclk = PPU.HCLOCK_VBLANK_2
     end
 
-    function PPU:vblank_2
-      self.vblank or= self.vblanking
+    function PPU:vblank_2()
+      if not self.vblank then self.vblank = self.vblanking end
       self.vblanking = false
-      self.hclk = HCLOCK_DUMMY
-      self.hclk_target = FOREVER_CLOCK
-      self.cpu.do_nmi(self.cpu.next_frame_clock) if self.need_nmi and self.vblank
+      self.hclk = PPU.HCLOCK_DUMMY
+      self.hclk_target = CPU.FOREVER_CLOCK
+      if self.need_nmi and self.vblank then self.cpu:do_nmi(self.cpu.next_frame_clock) end
     end
 
-    function PPU:update_enabled_flags
-      return unless self.any_show
+    function PPU:update_enabled_flags()
+      if not  self.any_show then return end
       self.bg_enabled = self.bg_show
       self.sp_enabled = self.sp_show
       self.sp_active = self.sp_enabled and self.sp_visible
     end
 
-    function PPU:update_enabled_flags_edge
+    function PPU:update_enabled_flags_edge()
       self.bg_enabled = self.bg_show_edge
       self.sp_enabled = self.sp_show_edge
       self.sp_active = self.sp_enabled and self.sp_visible
@@ -873,38 +960,40 @@ PPU._mt = {__index = PPU}
     -- default core
 
     function PPU:debug_logging(scanline, hclk, hclk_target)
-      hclk = "forever" if hclk == FOREVER_CLOCK
-      hclk_target = "forever" if hclk_target == FOREVER_CLOCK
+      if hclk == CPU.FOREVER_CLOCK then hclk = "forever" end
+if hclk_target == CPU.FOREVER_CLOCK then hclk_target = "forever" end
 
       self.conf.debug("ppu: scanline --{ scanline }, hclk --{ hclk }->--{ hclk_target }")
     end
 
-    function PPU:run
-      self.fiber or= Fiber.new { main_loop }
+    function PPU:run()
+        if not self.fiber then
+            sself.fiber = coroutine.create(self.main_loop, self, 0)
+        end
 
-      debug_logging(self.scanline, self.hclk, self.hclk_target) if self.conf.loglevel >= 3
+       if self.conf.loglevel >= 3 then self:debug_logging(self.scanline, self.hclk, self.hclk_target) end
 
-      make_sure_invariants
+      self:make_sure_invariants()
 
-      self.hclk_target = (self.vclk + self.hclk) * PPU.RP2C02_CC unless self.fiber.resume
+      if not self.fiber.resume then self.hclk_target = (self.vclk + self.hclk) * PPU.RP2C02_CC end
     end
 
-    function PPU:wait_frame
-      Fiber.yield true
+    function PPU:wait_frame()
+      coroutine.yield(true)
     end
 
-    function PPU:wait_zero_clocks
-      Fiber.yield if self.hclk_target <= self.hclk
+    function PPU:wait_zero_clocks()
+      if self.hclk_target <= self.hclk then coroutine.yield()  end
     end
 
-    function PPU:wait_one_clock
-      self.hclk += 1
-      Fiber.yield if self.hclk_target <= self.hclk
+    function PPU:wait_one_clock()
+      self.hclk =self.hclk + 1
+      if self.hclk_target <= self.hclk then coroutine.yield() end
     end
 
-    function PPU:wait_two_clocks
-      self.hclk += 2
-      Fiber.yield if self.hclk_target <= self.hclk
+    function PPU:wait_two_clocks()
+      self.hclk =self.hclk + 2
+       if self.hclk_target <= self.hclk then coroutine.yield() end
     end
 
     ------ main-loop structure
@@ -935,529 +1024,334 @@ PPU._mt = {__index = PPU}
     -- Comments like "when NNN" are markers for the purpose.
     --
     -- rubocop:disable Metrics/MethodLength, Metrics/CyclomaticComplexity, Metrics/PerceivedComplexity, Metrics/AbcSize
-    function PPU:main_loop
+    function PPU:main_loop()
       -- when 685
 
       -- wait for boot
-      boot
-      wait_frame
+      self:boot()
+      self:wait_frame()
 
-      while true
+      while true do
         -- pre-render scanline
-
-        341.step(589, 8) do
+        for i=1,#range(341,589+1, 8) do
+        --341.step(589, 8) do
           -- when 341, 349, ..., 589
-          if self.hclk == 341
-            self.sp_overflow = self.sp_zero_hit = self.vblanking = self.vblank = false
-            self.scanline = SCANLINE_HDUMMY
+          if self.hclk == 341 then
+            self.vblank = false
+            self.sp_overflow = false
+            self.sp_zero_hit = false
+            self.vblanking = false
+            self.scanline = PPU.SCANLINE_HDUMMY
           end
-          open_name
-          wait_two_clocks
+          self:open_name()
+          self:wait_two_clocks()
 
           -- when 343, 351, ..., 591
-          open_attr
-          wait_two_clocks
+          self:open_attr()
+          self:wait_two_clocks()
 
           -- when 345, 353, ..., 593
-          open_pattern(self.bg_pattern_base)
-          wait_two_clocks
+          self:open_pattern(self.bg_pattern_base)
+          self:wait_two_clocks()
 
           -- when 347, 355, ..., 595
-          open_pattern(self.io_addr | 8)
-          wait_two_clocks
+          self:open_pattern(bit.bor(self.io_addr , 8))
+          self:wait_two_clocks()
         end
 
-        597.step(653, 8) do
+        for i=1,#range(597,653+1, 8) do
+        --597.step(653, 8) do
           -- when 597, 605, ..., 653
-          if self.any_show
-            if self.hclk == 645
-              self.scroll_addr_0_4  = self.scroll_latch & 0x001f
-              self.scroll_addr_5_14 = self.scroll_latch & 0x7fe0
-              self.name_io_addr = (self.scroll_addr_0_4 | self.scroll_addr_5_14) & 0x0fff | 0x2000 -- make cache consistent
+          if self.any_show then
+            if self.hclk == 645 then
+              self.scroll_addr_0_4  = bit.band(self.scroll_latch , 0x001f)
+              self.scroll_addr_5_14 = bit.band(self.scroll_latch , 0x7fe0)
+              self.name_io_addr = bit.bor(bit.band(bit.bor(self.scroll_addr_0_4 , self.scroll_addr_5_14) , 0x0fff) , 0x2000) -- make cache consistent
             end
           end
-          open_name
-          wait_two_clocks
+          self:open_name()
+          self:wait_two_clocks()
 
           -- when 599, 607, ..., 655
           -- Nestopia uses open_name here?
-          open_attr
-          wait_two_clocks
+          self:open_attr()
+          self:wait_two_clocks()
 
           -- when 601, 609, ..., 657
-          open_pattern(self.pattern_end)
-          wait_two_clocks
+          self:open_pattern(self.pattern_end)
+          self:wait_two_clocks()
 
           -- when 603, 611, ..., 659
-          open_pattern(self.io_addr | 8)
-          if self.hclk == 659
+          self:open_pattern(bit.bor(self.io_addr ,8))
+          if self.hclk == 659 then
             self.hclk = 320
-            self.vclk += HCLOCK_DUMMY
-            self.hclk_target -= HCLOCK_DUMMY
+            self.vclk =self.vclk+ PPU.HCLOCK_DUMMY
+            self.hclk_target =self.hclk_target- PPU.HCLOCK_DUMMY
           else
-            wait_two_clocks
+            self:wait_two_clocks()
           end
-          wait_zero_clocks
+          self:wait_zero_clocks()
         end
 
-        while true
+        while true do
           -- visible scanline (not shown)
 
           -- when 320
-          load_extended_sprites
-          open_name
-          self.sp_latch = self.sp_ram[0] if self.any_show
+          self:load_extended_sprites()
+          self:open_name()
+          if self.any_show then self.sp_latch = self.sp_ram[0] end
           self.sp_buffered = 0
           self.sp_zero_in_line = false
           self.sp_index = 0
           self.sp_phase = 0
-          wait_one_clock
+          self:wait_one_clock()
 
           -- when 321
-          fetch_name
-          wait_one_clock
+          self:fetch_name()
+          self:wait_one_clock()
 
           -- when 322
-          open_attr
-          wait_one_clock
+          self:open_attr()
+          self:wait_one_clock()
 
           -- when 323
-          fetch_attr
-          scroll_clock_x
-          wait_one_clock
+          self:fetch_attr()
+          self:scroll_clock_x()
+          self:wait_one_clock()
 
           -- when 324
-          open_pattern(self.io_pattern)
-          wait_one_clock
+          self:open_pattern(self.io_pattern)
+          self:wait_one_clock()
 
           -- when 325
-          fetch_bg_pattern_0
-          wait_one_clock
+          self:fetch_bg_pattern_0()
+          self:wait_one_clock()
 
           -- when 326
-          open_pattern(self.io_pattern | 8)
-          wait_one_clock
+          self:open_pattern(bit.bor(self.io_pattern , 8))
+          self:wait_one_clock()
 
           -- when 327
-          fetch_bg_pattern_1
-          wait_one_clock
+          self:fetch_bg_pattern_1()
+          self:wait_one_clock()
 
           -- when 328
-          preload_tiles
-          open_name
-          wait_one_clock
+          self:preload_tiles()
+          self:open_name()
+          self:wait_one_clock()
 
           -- when 329
-          fetch_name
-          wait_one_clock
+          self:fetch_name()
+          self:wait_one_clock()
 
           -- when 330
-          open_attr
-          wait_one_clock
+          self:open_attr()
+          self:wait_one_clock()
 
           -- when 331
-          fetch_attr
-          scroll_clock_x
-          wait_one_clock
+          self:fetch_attr()
+          self:scroll_clock_x()
+          self:wait_one_clock()
 
           -- when 332
-          open_pattern(self.io_pattern)
-          wait_one_clock
+          self:open_pattern(self.io_pattern)
+          self:wait_one_clock()
 
           -- when 333
-          fetch_bg_pattern_0
-          wait_one_clock
+          self:fetch_bg_pattern_0()
+          self:wait_one_clock()
 
           -- when 334
-          open_pattern(self.io_pattern | 8)
-          wait_one_clock
+          self:open_pattern(bit.bor(self.io_pattern , 8))
+          self:wait_one_clock()
 
           -- when 335
-          fetch_bg_pattern_1
-          wait_one_clock
+          self:fetch_bg_pattern_1()
+          self:wait_one_clock()
 
           -- when 336
-          open_name
-          wait_one_clock
+          self:open_name()
+          self:wait_one_clock()
 
           -- when 337
-          if self.any_show
-            update_enabled_flags_edge
-            self.cpu.next_frame_clock = RP2C02_HVSYNC_1 if self.scanline == SCANLINE_HDUMMY and self.odd_frame
+          if self.any_show then
+            self:update_enabled_flags_edge()
+            if self.scanline == PPU.SCANLINE_HDUMMY and self.odd_frame then self.cpu.next_frame_clock = PPU.RP2C02_HVSYNC_1 end
           end
-          wait_one_clock
+          self:wait_one_clock()
 
           -- when 338
-          open_name
-          self.scanline += 1
-          if self.scanline ~= SCANLINE_VBLANK
-            if self.any_show
-              line = self.scanline ~= 0 or !self.odd_frame ? 341 : 340
+          self:open_name()
+          self.scanline =self.scanline + 1
+          if self.scanline ~= PPU.SCANLINE_VBLANK then
+            local line
+            if self.any_show then
+              line = self.scanline ~= 0 or not self.odd_frame and 341 or 340
             else
-              update_enabled_flags_edge
+              self:update_enabled_flags_edge()
               line = 341
             end
             self.hclk = 0
-            self.vclk += line
-            self.hclk_target = self.hclk_target <= line ? 0 : self.hclk_target - line
+            self.vclk =self.vclk + line
+            self.hclk_target = self.hclk_target <= line and 0 or self.hclk_target - line
           else
-            self.hclk = HCLOCK_VBLANK_0
-            wait_zero_clocks
+            self.hclk = PPU.HCLOCK_VBLANK_0
+            self:wait_zero_clocks()
             break
           end
-          wait_zero_clocks
+          self:wait_zero_clocks()
 
           -- visible scanline (shown)
-          0.step(248, 8) do
+        for i=1,#range(0,248+1, 8) do
+          --0.step(248, 8) do
             -- when 0, 8, ..., 248
-            if self.any_show
-              if self.hclk == 64
-                self.sp_addr = self.regs_oam & 0xf8 -- SP_OFFSET_TO_0_1
+            if self.any_show then
+              if self.hclk == 64 then
+                self.sp_addr = bit.band(self.regs_oam , 0xf8) -- SP_OFFSET_TO_0_1
                 self.sp_phase = nil
                 self.sp_latch = 0xff
               end
-              load_tiles
-              batch_render_eight_pixels
-              evaluate_sprites_even if self.hclk >= 64
-              open_name
+              self:load_tiles()
+              self:batch_render_eight_pixels()
+              if self.hclk >= 64 then self:evaluate_sprites_even() end
+              self:open_name()
             end
-            render_pixel
-            wait_one_clock
+            self:render_pixel()
+            self:wait_one_clock()
 
             -- when 1, 9, ..., 249
-            if self.any_show
-              fetch_name
-              evaluate_sprites_odd if self.hclk >= 64
+            if self.any_show then
+              self:fetch_name()
+              if self.hclk >= 64 then self:evaluate_sprites_odd() end
             end
-            render_pixel
-            wait_one_clock
+            self:render_pixel()
+            self:wait_one_clock()
 
             -- when 2, 10, ..., 250
-            if self.any_show
-              evaluate_sprites_even if self.hclk >= 64
-              open_attr
+            if self.any_show then
+              if self.hclk >= 64 then self:evaluate_sprites_even() end
+              self:open_attr()
             end
-            render_pixel
-            wait_one_clock
+            self:render_pixel()
+            self:wait_one_clock()
 
             -- when 3, 11, ..., 251
-            if self.any_show
-              fetch_attr
-              evaluate_sprites_odd if self.hclk >= 64
-              scroll_clock_y if self.hclk == 251
-              scroll_clock_x
+            if self.any_show then
+              self:fetch_attr()
+              if self.hclk >= 64 then self:evaluate_sprites_odd()  end
+               if self.hclk == 251. then  self:scroll_clock_y() end
+              self:scroll_clock_x()
             end
-            render_pixel
-            wait_one_clock
+            self:render_pixel()
+            self:wait_one_clock()
 
             -- when 4, 12, ..., 252
-            if self.any_show
-              evaluate_sprites_even if self.hclk >= 64
-              open_pattern(self.io_pattern)
+            if self.any_show then
+               if self.hclk >= 64 then self:evaluate_sprites_even() end
+              self:open_pattern(self.io_pattern)
             end
-            render_pixel
-            wait_one_clock
+            self:render_pixel()
+            self:wait_one_clock()
 
             -- when 5, 13, ..., 253
-            if self.any_show
-              fetch_bg_pattern_0
-              evaluate_sprites_odd if self.hclk >= 64
+            if self.any_show then
+              self:fetch_bg_pattern_0()
+               if self.hclk >= 64 then  self:evaluate_sprites_odd() end
             end
-            render_pixel
-            wait_one_clock
+            self:render_pixel()
+            self:wait_one_clock()
 
             -- when 6, 14, ..., 254
-            if self.any_show
-              evaluate_sprites_even if self.hclk >= 64
-              open_pattern(self.io_pattern | 8)
+            if self.any_show then
+              if self.hclk >= 64 then self:evaluate_sprites_even() end
+              self:open_pattern(bit.bor(self.io_pattern , 8))
             end
-            render_pixel
-            wait_one_clock
+            self:render_pixel()
+            self:wait_one_clock()
 
             -- when 7, 15, ..., 255
-            if self.any_show
-              fetch_bg_pattern_1
-              evaluate_sprites_odd if self.hclk >= 64
+            if self.any_show then
+              self:fetch_bg_pattern_1()
+              if self.hclk >= 64 then self:evaluate_sprites_odd() end
             end
-            render_pixel
+            self:render_pixel()
             -- rubocop:disable Style/NestedModifier, Style/IfUnlessModifierOfIfUnless:
-            update_enabled_flags if self.hclk ~= 255 if self.any_show
+ if self.hclk ~= 255 and self.any_show then            self:update_enabled_flags() end
             -- rubocop:enable Style/NestedModifier, Style/IfUnlessModifierOfIfUnless:
-            wait_one_clock
+            self:wait_one_clock()
           end
 
-          256.step(312, 8) do
+            for i=1,#range(256,312+1, 8) do
+          --256.step(312, 8) do
             -- rubocop:disable Style/IdenticalConditionalBranches
-            if self.hclk == 256
+            if self.hclk == 256 then
               -- when 256
-              open_name
-              self.sp_latch = 0xff if self.any_show
-              wait_one_clock
+              self:open_name()
+              if self.any_show then self.sp_latch = 0xff end
+              self:wait_one_clock()
 
               -- when 257
-              scroll_reset_x
+              self:scroll_reset_x()
               self.sp_visible = false
               self.sp_active = false
-              wait_one_clock
+              self:wait_one_clock()
             else
               -- when 264, 272, ..., 312
-              open_name
-              wait_two_clocks
+              self:open_name()
+              self:wait_two_clocks()
             end
             -- rubocop:enable Style/IdenticalConditionalBranches
 
             -- when 258, 266, ..., 314
             -- Nestopia uses open_name here?
-            open_attr
-            wait_two_clocks
+            self:open_attr()
+            self:wait_two_clocks()
 
             -- when 260, 268, ..., 316
-            if self.any_show
-              buffer_idx = (self.hclk - 260) / 2
-              open_pattern(buffer_idx >= self.sp_buffered ? self.pattern_end : open_sprite(buffer_idx))
+            if self.any_show then
+              local buffer_idx = (self.hclk - 260) / 2
+              self:open_pattern(buffer_idx >= self.sp_buffered and self.pattern_end or self:open_sprite(buffer_idx))
               -- rubocop:disable Style/NestedModifier, Style/IfUnlessModifierOfIfUnless:
-              self.regs_oam = 0 if self.scanline == 238 if self.hclk == 316
+              if self.scanline == 238 and self.hclk == 316 then self.regs_oam = 0  end
               -- rubocop:enable Style/NestedModifier, Style/IfUnlessModifierOfIfUnless:
             end
-            wait_one_clock
+            self:wait_one_clock()
 
             -- when 261, 269, ..., 317
-            if self.any_show
-              self.io_pattern = self.chr_mem[self.io_addr & 0x1fff] if (self.hclk - 261) / 2 < self.sp_buffered
+            if self.any_show then
+              if (self.hclk - 261) / 2 < self.sp_buffered then self.io_pattern = self.chr_mem[bit.band(self.io_addr, 0x1fff)]  end
             end
-            wait_one_clock
+            self:wait_one_clock()
 
             -- when 262, 270, ..., 318
-            open_pattern(self.io_addr | 8)
-            wait_one_clock
+            self:open_pattern(bit.bor(self.io_addr, 8))
+            self:wait_one_clock()
 
             -- when 263, 271, ..., 319
-            if self.any_show
-              buffer_idx = (self.hclk - 263) / 2
-              if buffer_idx < self.sp_buffered
-                pat0 = self.io_pattern
-                pat1 = self.chr_mem[self.io_addr & 0x1fff]
-                load_sprite(pat0, pat1, buffer_idx) if pat0 ~= 0 or pat1 ~= 0
+            if self.any_show then
+              local buffer_idx = (self.hclk - 263) / 2
+              if buffer_idx < self.sp_buffered then
+                local pat0 = self.io_pattern
+                local pat1 = self.chr_mem[bit.band(self.io_addr , 0x1fff)]
+                if pat0 ~= 0 or pat1 ~= 0 then self:load_sprite(pat0, pat1, buffer_idx) end
               end
             end
-            wait_one_clock
+            self:wait_one_clock()
           end
         end
 
         -- post-render scanline (vblank)
 
         -- when 681
-        vblank_0
-        wait_zero_clocks
+        self:vblank_0()
+        self:wait_zero_clocks()
 
         -- when 682
-        vblank_1
-        wait_zero_clocks
+        self:vblank_1()
+        self:wait_zero_clocks()
 
         -- when 684
-        vblank_2
-        wait_frame
+        self:vblank_2()
+        self:wait_frame()
       end
     end
-    -- rubocop:enable Metrics/MethodLength, Metrics/CyclomaticComplexity, Metrics/PerceivedComplexity, Metrics/AbcSize
-
-    ------------------------------------------------------------------------------------------------------------------------------------------------------
-    -- optimized core generator
-    class OptimizedCodeBuilder
-      include CodeOptimizationHelper
-
-      OPTIONS = [
-        :method_inlining, :ivar_localization,
-        :split_show_mode, :split_a12_checks, :clock_specialization,
-        :fastpath, :batch_render_pixels, :oneline,
-      ]
-
-      function PPU:build
-        depends(:ivar_localization, :method_inlining)
-        depends(:batch_render_pixels, :fastpath)
-
-        mdefs = parse_method_definitions(__FILE__)
-        handlers = parse_clock_handlers(mdefs[:main_loop].body)
-
-        handlers = specialize_clock_handlers(handlers) if self.clock_specialization
-        if self.fastpath
-          handlers = add_fastpath(handlers) do |fastpath, hclk|
-            self.batch_render_pixels ? batch_render_pixels(fastpath, hclk) : fastpath
-          end
-        end
-        code = build_loop(handlers)
-        code = ppu_expand_methods(code, mdefs) if self.method_inlining
-
-        if self.split_show_mode
-          code, code_no_show = split_mode(code, "self.any_show")
-          if self.split_a12_checks
-            code, code_no_a12 = split_mode(code, "self.a12_monitor")
-            code = branch("self.a12_monitor", code, code_no_a12)
-          end
-          code = branch("self.any_show", code, code_no_show)
-        end
-
-        code = gen(
-          mdefs[:make_sure_invariants].body,
-          code,
-          "self.hclk_target = (self.vclk + self.hclk) * PPU.RP2C02_CC"
-        )
-
-        code = localize_instance_variables(code) if self.ivar_localization
-
-        code = gen(
-          "function PPU:self.run",
-          *(self.loglevel >= 3 ? ["  debug_logging(self.scanline, self.hclk, self.hclk_target)"] : []),
-          indent(2, code),
-          "end",
-        )
-
-        code = oneline(code) if self.oneline
-
-        code
-      end
-
-      COMMANDS = {
-        wait_zero_clocks: "",
-        wait_one_clock:   "self.hclk += 1\n",
-        wait_two_clocks:  "self.hclk += 2\n",
-        wait_frame:       "return\n",
-      }
-
-      -- extracts the actions for each clock from CPU--main_loop
-      function PPU:parse_clock_handlers(main_loop)
-        handlers = {}
-        main_loop.scan(/^( *)-- when (.*)\n((?:\1.*\n|\n)*?\1wait_.*\n)/) do |indent, hclks, body|
-          body = indent(-indent.size, body)
-          body = body.gsub(/^( *)break\n/, "")
-          body = expand_methods(body, COMMANDS)
-          if hclks =~ /^(\d+), (\d+), \.\.\., (\d+)$/
-            first, second, last = $1.to_i, $2.to_i, $3.to_i
-            first.step(last, second - first) do |hclk|
-              handlers[hclk] = body
-            end
-          else
-            handlers[hclks.to_i] = body
-          end
-        end
-        handlers
-      end
-
-      -- split clock handlers that contains a branch depending on clock
-      function PPU:specialize_clock_handlers(handlers)
-        handlers.each do |hclk, handler|
-          -- pre-caluculate some conditions like `self.hclk == 64` with `false`
-          handler = handler.gsub(/self.hclk (==|>=|~=) (\d+)/) { hclk.send($1.to_sym, $2.to_i) }
-
-          -- remove disabled branches like `if false ... end`
-          handlers[hclk] = remove_trivial_branches(handler)
-        end
-      end
-
-      -- pass a fastpath
-      function PPU:add_fastpath(handlers)
-        handlers.each do |hclk, handler|
-          next unless hclk % 8 == 0 and hclk < 256
-          fastpath = gen(*(0..7).map {|i| handlers[hclk + i] })
-          fastpath = yield fastpath, hclk
-          handlers[hclk] = branch("self.hclk + 8 <= self.hclk_target", fastpath, handler)
-        end
-      end
-
-      -- replace eight `render_pixel` calls with one optimized batch version
-      function PPU:batch_render_pixels(fastpath, hclk)
-        fastpath = expand_methods(fastpath, render_pixel: gen(
-          "unless self.any_show",
-          "  self.bg_pixels[self.hclk % 8] = 0",
-          "  self.output_pixels << self.output_color[self.scroll_addr_5_14 & 0x3f00 == 0x3f00 ? self.scroll_addr_0_4 : 0]",
-          "end",
-        ))
-        expand_methods(fastpath, batch_render_eight_pixels: gen(
-          "-- batch-version of render_pixel",
-          "if self.any_show",
-          "  if self.sp_active",
-          "    if self.bg_enabled",
-          *(0..7).flat_map do |i|
-            [
-              "      pixel--{ i } = self.bg_pixels[--{ i }]",
-              "      if sprite = self.sp_map[self.hclk--{ i ~= 0 ? " + --{ i }" : "" }]",
-              "        if pixel--{ i } % 4 == 0",
-              "          pixel--{ i } = sprite[2]",
-              "        else",
-              *(hclk + i == 255 ? [] : ["          self.sp_zero_hit = true if sprite[1]"]),
-              "          pixel--{ i } = sprite[2] unless sprite[0]",
-              "        end",
-              "      end",
-            ]
-          end,
-          "      self.output_pixels << " + (0..7).map {|n| "self.output_color[pixel--{ n }]" } * " << ",
-          "    else",
-          *(0..7).map do |i|
-            "      pixel--{ i } = (sprite = self.sp_map[self.hclk --{ i ~= 0 ? " + --{ i }" : "" }]) ? sprite[2] : 0"
-          end,
-          "      self.output_pixels << " + (0..7).map {|n| "self.output_color[pixel--{ n }]" } * " << ",
-          "    end",
-          "  else",
-          "    if self.bg_enabled -- this is the true hot-spot",
-          "      self.output_pixels << " + (0..7).map {|n| "self.output_color[self.bg_pixels[--{ n }]]" } * " << ",
-          "    else",
-          "      clr = self.output_color[0]",
-          "      self.output_pixels << " + ["clr"] * 8 * " << ",
-          "    end",
-          "  end",
-          "end",
-        ))
-      end
-
-      -- remove all newlines (this will reduce `trace` instructions)
-      function PPU:oneline(code)
-        code.gsub(/^ *|--.*/, "").gsub("[\n", "[").gsub(/\n *\]/, "]").tr("\n", ";")
-      end
-
-      -- inline method calls
-      function PPU:ppu_expand_methods(code, mdefs)
-        code = expand_inline_methods(code, :open_sprite, mdefs[:open_sprite])
-
-        -- twice is enough
-        expand_methods(expand_methods(code, mdefs), mdefs)
-      end
-
-      -- create two version of the same code by evaluating easy branches
-      -- CAUTION: the condition must be invariant during PPU--run
-      function PPU:split_mode(code, cond)
-        %w(true false).map do |bool|
-          rebuild_loop(remove_trivial_branches(replace_cond_var(code, cond, bool)))
-        end
-      end
-
-      -- generate a main code
-      function PPU:build_loop(handlers)
-        clauses = {}
-        handlers.sort.each do |hclk, handler|
-          (clauses[handler] or= []) << hclk
-        end
-
-        gen(
-          "while self.hclk_target > self.hclk",
-          "  case self.hclk",
-          *clauses.invert.sort.map do |hclks, handler|
-            "  when --{ hclks * ", " }\n" + indent(4, handler)
-          end,
-          "  end",
-          "end",
-        )
-      end
-
-      -- deconstruct a loop, unify handlers, and re-generate a new loop
-      function PPU:rebuild_loop(code)
-        handlers = {}
-        code.scan(/^  when ((?:\d+, )*\d+)\n((?:    .*\n|\n)*)/) do |hclks, handler|
-          hclks.split(", ").each do |hclk|
-            handlers[hclk.to_i] = indent(-4, handler)
-          end
-        end
-        build_loop(handlers)
-      end
-    end
-  end
-end

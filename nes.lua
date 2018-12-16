@@ -1,7 +1,9 @@
 require "serpent"
 require "utils"
 require "cpu"
+require "ppu"
 require "rom"
+require "palette"
 
 NES = {}
 local NES = NES
@@ -51,6 +53,7 @@ function NES:new(file)
             return CPU.CLK[1]
         end
     }
+    --[[
     nes.cpu.ppu = {
         reset = function()
         end,
@@ -61,6 +64,8 @@ function NES:new(file)
         sync = function(clk)
         end
     }
+    --]]
+    nes.cpu.ppu = PPU:new({}, nes.cpu, PALETTE:defacto_palette())
     nes.pads = {
         reset = function()
         end
