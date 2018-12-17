@@ -5,6 +5,8 @@ require "ppu"
 require "rom"
 require "palette"
 
+UTILS:import()
+
 NES = {}
 local NES = NES
 NES._mt = {__index = NES}
@@ -21,24 +23,24 @@ function NES:reset()
     cpu:boot()
     self.rom:load_battery()
 end
+function NES:run_once()
+    self.cpu.ppu:setup_frame()
+    self.cpu:run()
+    self.cpu.ppu:vsync()
+    self.cpu.apu:vsync()
+    self.cpu:vsync()
+    self.rom:vsync()
+
+    self.frame = self.frame + 1
+end
 function NES:run()
     self:reset()
-
     while true do
-        self.cpu.ppu:setup_frame()
-        self.cpu:run()
-        self.cpu.ppu:vsync()
-        self.cpu.apu:vsync()
-        self.cpu:vsync()
-        self.rom:vsync()
-
-        self.frame = self.frame + 1
-        UTILS.print("FRAME")
-        UTILS.print(self.frame)
+        self:run_once()
     end
 end
 function NES:new(file)
-    local conf = {romfile = file}
+    local conf = {romfile = file, loglevel = 5}
     local nes = {}
     setmetatable(nes, NES._mt)
     nes.cpu = CPU.new()
@@ -65,12 +67,12 @@ function NES:new(file)
         end
     }
     --]]
-    nes.cpu.ppu = PPU:new({}, nes.cpu, PALETTE:defacto_palette())
+    nes.cpu.ppu = PPU:new(conf, nes.cpu, PALETTE:defacto_palette())
     nes.pads = {
         reset = function()
         end
     }
-    nes.rom = ROM.load(conf, nes.cpu, nes.ppu)
+    nes.rom = ROM.load(conf, nes.cpu, nes.cpu.ppu)
 
     nes.frame = 0
     nes.frame_target = nil

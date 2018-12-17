@@ -1,21 +1,7 @@
 PALETTE = {}
 local PALETTE = PALETTE
 
-local nthBitIsSet = UTILS.nthBitIsSet
-local isDefined = UTILS.isDefined
-local bind = UTILS.bind
-local tSetter = UTILS.tSetter
-local tGetter = UTILS.tGetter
-local fill = UTILS.fill
-local range = UTILS.range
-local map = UTILS.map
-local flat_map = UTILS.flat_map
-local uniq = UTILS.uniq
-local clear = UTILS.clear
-local all = UTILS.all
-local copy = UTILS.copy
-local nthBitIsSetInt = UTILS.nthBitIsSetInt
-local transpose = UTILS.transpose
+UTILS:import()
 
 function PALETTE:defacto_palette()
     return flat_map(

@@ -1,3 +1,5 @@
+UTILS:import()
+
 local NES =
     Nes or
     {-- DUMMY NES
@@ -25,6 +27,13 @@ CPU.IRQ_VECTOR   = 0xfffe
 CPU.IRQ_EXT   = 0x01
 CPU.IRQ_FRAME = 0x40
 CPU.IRQ_DMC = 0x80
+
+CPU.NMIVector = 0xFFFA;
+CPU.ResetVector = 0xFFFC;
+CPU.IRQVector = 0xFFFE;
+CPU.ClockRates = {Ntsc = 1789773,
+Pal = 1662607,
+Dendy = 1773448}
 
 local UNDEFINED = CPU.UNDEFINED
 local CLK = CPU.CLK
@@ -98,34 +107,52 @@ function CPU:peek_jam_2(_addr)
 end
 
 function CPU:peek_ram(addr)
-    return self.ram[addr % CPU.RAM_SIZE+1]
+    return self.ram[addr % CPU.RAM_SIZE]
 end
 function CPU:poke_ram(addr, data)
-    self.ram[addr % CPU.RAM_SIZE+1] = data
+    self.ram[addr % CPU.RAM_SIZE] = data
 end
 
+-- read an addr (8 bit)
 function CPU:fetch(addr)
-    local v =  self._fetch[addr]
-    --[[
-    print("FETCH")
-    print(addr)
-    print(v)
-    print(v(addr))
-    print("FETCHE")
-    --]]
-    v = (type(v) ~= "table" or v ~= UNDEFINED) and v or nil
-    return v and v(addr) or nil
+    local getter =  self._fetch[addr]
+    getter = (type(getter) ~= "table" or getter ~= UNDEFINED) and getter or nil
+    if not getter  then
+      printf("Error fetching %04X state:", addr)
+      self:printState()
+      local range = 2
+      printf("Surroundings (range:%i):", range)
+      for i=addr-range,addr+range do
+        local getter = self._fetch[i]
+        if getter and (type(getter) ~= "table" or getter ~= UNDEFINED) then
+          printf("%04X %04x", i, getter(i))
+        else
+          if not getter then
+          printf("%04X NIL", i )
+          else
+          printf("%04X UNDEF", i )
+          end
+        end
+      end
+      error(string.format("Error fetching %04X", addr))
+    end
+    --printf("%04X : %04X", addr, getter(addr))
+    return getter and getter(addr) or nil
 end
 function CPU:store(addr, value)
+    --print(type(self._store[addr])=="table" and self._store[addr]==UNDEFINED)
     return self._store[addr](addr, value)
 end
 
+-- Read 16 bits (word) from addr
 function CPU:peek16(addr)
   local a = self:fetch(addr)
-  local b = bit.lshift(self:fetch(addr + 1), 8)
+  local b = bit.lshift(self:fetch(addr+1), 8)
   local x = a + b
   --[[
     print "peek16"
+printf("%02X", a)
+  printf("%02X", b)
     UTILS.print(a)
     UTILS.print(b)
     UTILS.print(addr)
@@ -135,17 +162,21 @@ function CPU:peek16(addr)
 end
 
 function CPU:add_mappings(addr, peek, poke)
-    self.peeks[peek] = isDefined(self.peeks[peek]) or peek
+    self.peeks[peek] = isDefined(self.peeks[peek]) and self.peeks[peek] or peek
     peek = self.peeks[peek]
-    self.pokes[poke] = isDefined(self.pokes[poke]) or poke
+    self.pokes[poke] = isDefined(self.pokes[poke]) and self.pokes[poke] or poke
     poke = self.pokes[poke]
     if type(addr) == "number" then
         addr = {addr}
     end
-    for i = 1, #addr do
+    for i = addr[0] and 0 or 1, #addr do
         local x = addr[i]
         self._fetch[x] = peek
-        self._store[x] = (poke and type(poke)=="table" and poke ~= UNDEFINED) and poke or CPU.PokeNop
+        if poke and type(poke)~="table" then
+         self._store[x] = poke
+        else
+          self._store[x] = CPU.PokeNop
+        end
     end
 end
 
@@ -163,7 +194,7 @@ function CPU:reset()
     fill(self.ram, 0xff)
     self.clk = 0
     self.clk_total = 0
-    self:add_mappings(range(0x0000, 0x07ff), tGetter(self.ram), tSetter(self.ram))
+    self:add_mappings(range(0x0000, 0x07ff), tGetter(self.ram,0), tSetter(self.ram))
     self:add_mappings(range(0x0800, 0x1fff), bind(self.peek_ram, self), bind(self.poke_ram, self))
     self:add_mappings(range(0x2000, 0xffff), bind(self.peek_nop, self), UNDEFINED)
     self:add_mappings(0xfffc, bind(self.peek_jam_1, self), UNDEFINED)
@@ -179,6 +210,7 @@ function CPU:new(conf)
     cpu._fetch = fill({}, CPU.UNDEFINED, CPU.MAINMEM_SIZE)
     cpu.peeks = {}
     cpu.pokes = {}
+    cpu.clk_rate = CPU.ClockRates.Ntsc
     cpu.clk = 0 -- the current clock
     cpu.clk_frame = 0
     cpu.clk_next_frame = 0 -- the next frame clock
@@ -212,7 +244,7 @@ end
 
 function CPU:sprite_dma(addr, sp_ram)
     for i = 0, 255 do
-        sp_ram[i] = self.ram[addr + i+1]
+        sp_ram[i] = self.ram[addr + i]
     end
     for i = 0, 63 do
         sp_ram[i * 4 + 2] = bit.band(sp_ram[i * 4 + 2], 0xe3)
@@ -220,8 +252,8 @@ function CPU:sprite_dma(addr, sp_ram)
 end
 
 function CPU:boot()
-    self.clk = CLK[7]
-    self._pc = self:peek16(CPU.RESET_VECTOR)
+    self.clk = 0
+    self._pc = 0xC000 
 end
 
 function CPU:vsync()
@@ -248,7 +280,8 @@ end
 
 function CPU:clear_irq(line)
     local old_irq_flags = bit.band(self.irq_flags, bit.bor(CPU.IRQ_FRAME, CPU.IRQ_DMC))
-    self.irq_flags = bit.band(self.irq_flags, line ^ bit.bor(bit.bor(CPU.IRQ_EXT, CPU.IRQ_FRAME), CPU.IRQ_DMC))
+    self.irq_flags = bit.band(bit.bxor(self.irq_flags,
+      bit.bxor(line, bit.bor(bit.bor(CPU.IRQ_EXT, CPU.IRQ_FRAME), CPU.IRQ_DMC))))
     if self.irq_flags == 0 then
         self.clk_irq = NES.FOREVER_CLOCK
     end
@@ -290,15 +323,18 @@ end
 
 function CPU:fetch_irq_isr_vector()
     if self.clk >= self.clk_frame then
+      --print("30000")
         self:fetch(0x3000)
     end
     if self.clk_nmi ~= NES.FOREVER_CLOCK then
         if self.clk_nmi + CLK[2] <= self.clk then
             self.clk_nmi = NES.FOREVER_CLOCK
+      --print("NMI")
             return CPU.NMI_VECTOR
         end
         self.clk_nmi = self.clk + 1
     end
+      --print("SAD")
     return CPU.IRQ_VECTOR
 end
 
@@ -314,7 +350,7 @@ function CPU:flags_pack()
                 bit.bor(
                     bit.bor(
                         bit.bor(
-                            bit.band(bit.rshift(bit.bor(self._p_nz, self._p_nz), 1), 0x80),
+                            bit.band(bit.bor(bit.rshift(self._p_nz, 1),self._p_nz), 0x80),
                             (bit.band(self._p_nz, 0xff) ~= 0 and 0 or 2)
                         ),
                         self._p_c
@@ -367,13 +403,15 @@ function CPU:store_mem()
 end
 
 function CPU:store_zpg()
-    self.ram[self.addr+1] = self.data
+    self.ram[self.addr] = self.data
 end
 
 ------ stack management ------
 function CPU:push8(data)
-    self.ram[0x0100 + self._sp+1] = data
+    self.ram[0x0100 + self._sp] = data
     self._sp = bit.band((self._sp - 1), 0xff)
+      --printf("push8")
+      --printf("%X",self._sp)
 end
 
 function CPU:push16(data)
@@ -382,13 +420,23 @@ function CPU:push16(data)
 end
 
 function CPU:pull8()
+      --printf("pull8")
+      --printf("%X",self._sp)
     self._sp = bit.band(self._sp + 1, 0xff)
-    return self.ram[0x0100 + self._sp+1]
+      --printf("%X",self._sp)
+      --printf("%02X",0x0100 + self._sp)
+    return self.ram[0x0100 + self._sp]
 end
 
 function CPU:pull16()
     local x = self:pull8()
-    return x + 256 * x
+    local b = self:pull8()
+    --[[
+    print("pull")
+      printf("%X",x)
+      printf("%X",b)
+      ]]
+    return x + 256 * b
 end
 
 ------------------------------------------------------------------------------------------------------------------------
@@ -397,6 +445,7 @@ end
 -- immediate addressing (read only)
 function CPU:imm(_read, _write)
     self.data = self:fetch(self._pc)
+      printf( "%02X" ,self._pc)
     self._pc = self._pc + 1
     self.clk = self.clk + CLK[2]
 end
@@ -407,7 +456,7 @@ function CPU:zpg(read, write)
     self._pc = self._pc + 1
     self.clk = self.clk + CLK[3]
     if read then
-        self.data = self.ram[self.addr+1]
+        self.data = self.ram[self.addr]
         if write then
             self.clk = self.clk + CLK[2]
         end
@@ -420,7 +469,7 @@ function CPU:zpg_reg(indexed, read, write)
     self._pc = self._pc + 1
     self.clk = self.clk + CLK[4]
     if read then
-        self.data = self.ram[self.addr+1]
+        self.data = self.ram[self.addr]
         if write then
             self.clk = self.clk + CLK[2]
         end
@@ -445,7 +494,7 @@ end
 
 -- absolute indexed addressing
 function CPU:abs_reg(indexed, read, write)
-    local addr = self._pc + 1
+    local addr = self._pc
     local i = indexed + self:fetch(self._pc)
     self.addr = bit.band(bit.lshift(self:fetch(addr), 8) + i, 0xffff)
     if write then
@@ -476,7 +525,7 @@ function CPU:ind_x(read, write)
     local addr = self:fetch(self._pc) + self._x
     self._pc = self._pc + 1
     self.clk = self.clk + CLK[5]
-    self.addr = bit.bor(self.ram[bit.band(addr, 0xff)+1], bit.lshift(self.ram[1+bit.band(addr + 1, 0xff)], 8))
+    self.addr = bit.bor(self.ram[bit.band(addr, 0xff)], bit.lshift(self.ram[bit.band(addr + 1, 0xff)], 8))
     return self:read_write(read, write)
 end
 
@@ -484,15 +533,15 @@ end
 function CPU:ind_y(read, write)
     local addr = self:fetch(self._pc)
     self._pc = self._pc + 1
-    local indexed = self.ram[addr+1] + self._y
+    local indexed = self.ram[addr] + self._y
     self.clk = self.clk + CLK[4]
     if write then
         self.clk = self.clk + CLK[1]
-        self.addr = bit.lshift(self.ram[bit.band(addr + 1, 0xff)+1], 8) + indexed
+        self.addr = bit.lshift(self.ram[bit.band(addr + 1, 0xff)], 8) + indexed
         addr = self.addr - bit.band(indexed, 0x100) -- for inlining fetch
         self:fetch(addr)
     else
-        self.addr = bit.band(bit.lshift(self.ram[bit.band(addr + 1, 0xff)+1], 8) + indexed, 0xffff)
+        self.addr = bit.band(bit.lshift(self.ram[bit.band(addr + 1, 0xff)], 8) + indexed, 0xffff)
         if bit.band(indexed, 0x100) ~= 0 then
             addr = bit.band(self.addr - 0x100, 0xffff) -- for inlining fetch
             self:fetch(addr)
@@ -502,9 +551,10 @@ function CPU:ind_y(read, write)
     return self:read_write(read, write)
 end
 
-
+  
     function CPU:read_write(read, write)
       if read then
+        --print(string.format("%04X",self.addr))
         self.data = self:fetch(self.addr)
         self.clk =self.clk + CLK[1]
         if write then
@@ -519,13 +569,17 @@ end
 
     -- load instructions
     function CPU:_lda()
+      printf("%02X",self.data)
       self._p_nz = self.data
       self._a = self.data
     end
 
     function CPU:_ldx()
+      printf("%02X",self.data)
       self._p_nz = self.data
       self._x = self.data
+      printf("%02X",self._x)
+      printf("%02X",self._p_nz)
     end
 
     function CPU:_ldy()
@@ -539,7 +593,10 @@ end
     end
 
     function CPU:_stx()
+      --print(self._x)
+      --print(self.data)
       self.data = self._x
+      --printf("%02X",self.ram[0x07ff])
     end
 
     function CPU:_sty()
@@ -594,7 +651,10 @@ end
     end
 
     function CPU:_rts()
-      self._pc = bit.band(self:pull16() + 1, 0xffff)
+      local x = self:pull16()
+      --printf("rts")
+      --printf("%X04",x)
+      self._pc = bit.band(x + 1, 0xffff)
       self.clk =self.clk + CLK[6]
     end
 
@@ -646,19 +706,19 @@ end
     -- math operations
     function CPU:_adc()
       local tmp = self._a + self.data + self._p_c
-      self._p_v = bit.band(bit.bnot(self._a ^ self.data), bit.band((self._a ^ tmp), 0x80))
+      self._p_v = bit.band(bit.bnot(bit.bxor(self._a , self.data)), bit.band(bit.bxor(self._a, tmp), 0x80))
        self._a = bit.band(tmp, 0xff)
       self._p_nz =self._a
-      self._p_c = tmp[8]
+      self._p_c = nthBitIsSetInt( tmp,8)
     end
 
     function CPU:_sbc()
-      local data = self.data ^ 0xff
+      local data = bit.bxor(self.data , 0xff)
       local tmp = self._a + data + self._p_c
-      self._p_v = bit.band(bit.bnot(self._a ^ data), bit.band((self._a ^ tmp) , 0x80))
+      self._p_v = bit.band(bit.bnot(bit.bxor(self._a, data)), bit.band(bit.bxor(self._a, tmp) , 0x80))
        self._a = bit.band(tmp , 0xff)
       self._p_nz =self._a
-      self._p_c = tmp[8]
+      self._p_c = nthBitIsSetInt( tmp,8)
     end
 
     -- logical operations
@@ -673,7 +733,7 @@ end
     end
 
     function CPU:_eor()
-        self._a = ( self._a ^self.data)
+        self._a = bit.bxor( self._a,self.data)
       self._p_nz = self._a
     end
 
@@ -685,19 +745,19 @@ end
     function CPU:_cmp()
       local data = self._a - self.data
       self._p_nz = bit.band(data , 0xff)
-      self._p_c = 1 - data[8]
+      self._p_c = 1 - nthBitIsSetInt( data,8)
     end
 
     function CPU:_cpx()
       local data = self._x - self.data
       self._p_nz = bit.band(data , 0xff)
-      self._p_c = 1 - data[8]
+      self._p_c = 1 - nthBitIsSetInt( data,8)
     end
 
     function CPU:_cpy()
       local data = self._y - self.data
       self._p_nz = bit.band(data, 0xff)
-      self._p_c = 1 - data[8]
+      self._p_c = 1 - nthBitIsSetInt( data,8)
     end
 
     -- shift operations
@@ -855,6 +915,8 @@ end
     function CPU:_txs()
       self.clk =self.clk + CLK[2]
       self._sp = self._x
+      --printf("txs")
+      --printf("%X04",self._sp)
     end
 
     -- undocumented instructions, rarely used
@@ -872,8 +934,8 @@ end
     function CPU:_arr()
       self._a = bit.bor(bit.rshift(bit.band(self.data, self._a), 1), bit.lshift(self._p_c, 7))
       self._p_nz = self._a
-      self._p_c = self._a[6]
-      self._p_v = self._a[6] ^ self._a[5]
+      self._p_c = nthBitIsSetInt( self._a,6)
+      self._p_v = bit.bxor(nthBitIsSetInt( self._a,6), nthBitIsSetInt( self._a,5))
     end
 
     function CPU:_asr()
@@ -894,6 +956,8 @@ end
 
     function CPU:_las()
       self._sp =bit.band(self._sp, self.data)
+      --printf("las")
+      --printf("%X04",self._sp)
        self._x = self._sp
       self._p_nz = self._x
       self._a =self._x
@@ -923,6 +987,12 @@ end
       local c = bit.lshift(self._p_c ,7)
       self._p_c = bit.band(self.data , 1)
       self.data = bit.bor(bit.rshift(self.data ,1), c)
+      printf("%02X", self:fetch(self.addr))
+      printf("%02X", self.addr)
+      printf("%02X", c)
+      printf("%02X", self.data)
+      printf("%02X", self._p_c)
+      printf("%02X", self.data)
       return self:_adc()
     end
 
@@ -943,6 +1013,8 @@ end
 
     function CPU:_shs()
       self._sp = bit.band(self._a, self._x)
+      --printf("shs")
+      --printf("%X04",self._sp)
       self.data = bit.band(self._sp, (bit.rshift(self.addr, 8) + 1))
     end
 
@@ -1001,7 +1073,12 @@ end
 
     --------------------------------------------------------------------------------------------------------------------
     -- default core
-
+    function CPU:printState()
+      print(string.format("PC:%04X OP:%02X %02X %02X %s %02X A:%02X X:%02X Y:%02X P:%02X SP:%02X CYC:%3d" , 
+         self._pc,self.opcode or 0,self:fetch(self._pc+1),self:fetch(self._pc+2),table.concat(CPU.DISPATCH[self.opcode] or {}, " "),self.data,
+         self._a, self._x, self._y, self:flags_pack(), self._sp, self.clk / 4 % 341
+      ))
+    end
     function CPU:r_op(instr, mode)
       self[mode](self, true, false)
       self[instr](self)
@@ -1032,7 +1109,7 @@ end
     end
 
     function CPU:do_clock()
-      local clock = self.apu.do_clock()
+      local clock = self.apu:do_clock()
 
        if clock > self.clk_frame then clock = self.clk_frame end
 
@@ -1052,17 +1129,15 @@ end
       self.clk_target = clock
     end
     local asd = 0
-    function CPU:run()
-      self:do_clock()
-      repeat
-        repeat
+    function CPU:run_once()
           self.opcode = self:fetch(self._pc)
-          print(string.format("%u %u %s \t %u %u %u %u %d %u", self.addr, self.data, table.concat(CPU.DISPATCH[self.opcode], " "),self._a, self._x, self._y, self._p_c, self._pc, self.clk))
-          if self.conf.loglevel >= 3 then
+          --if self.conf.loglevel >= 3 then
+            self:printState()
+            --[[
             self.conf.debug(string.format("PC:%04X A:%02X X:%02X Y:%02X P:%02X SP:%02X CYC:%3d : OPCODE:%02X (%d, %d)" ,
               self._pc, self._a, self._x, self._y, self:flags_pack(), self._sp, self.clk / 4 % 341, self.opcode, self.cl
-            ))
-          end
+            ))]]
+          --end
 
           self._pc =self._pc + 1
 
@@ -1074,9 +1149,15 @@ end
 
           if self.ppu_sync then self.ppu.sync(self.clk)  end
           asd = asd+1
-          if asd > 30 then
+          if asd > 10000 then
             error "asd"
           end
+    end
+    function CPU:run()
+      self:do_clock()
+      repeat
+        repeat
+          self:run_once()
         until self.clk < self.clk_target
         self:do_clock()
     until self.clk < self.clk_frame
@@ -1089,16 +1170,20 @@ end
       uno= {"ind_x", "zpg", "imm", "abs", "ind_y", "zpg_y", "abs_y", "abs_y"},
     }
     CPU.DISPATCH = {}
+
+    --add an op/instruction
+    -- opcodes is a table or a single intruction code
+    -- args is a table of strings or a string of the form {kind,funcName,addrmode} or funcName
     local function op(opcodes, args)
         for _,opcode in ipairs(opcodes) do
       local send_args
             if type(args) == "table" then
                 if (args[1] == "r_op" or args[1] == "w_op" or args[1] == "rw_op") then
-                    local kind, ope, mode = args[1], args[2], args[3]
-                    mode = CPU.ADDRESSING_MODES[mode][bit.band(bit.rshift(opcode, 2), 7)+1]
-                    send_args = {kind, ope, mode}
+                    local kind, ope, addrmode = args[1], args[2], args[3]
+                    addrmode = CPU.ADDRESSING_MODES[addrmode][bit.band(bit.rshift(opcode, 2), 7)+1]
+                    send_args = {kind, ope, addrmode}
                     if kind ~= "r_op" then
-                        send_args[#send_args+1]= (mode:sub(1, 3) == "zpg" and "store_zpg" or "store_mem")
+                        send_args[#send_args+1]= (addrmode:sub(1, 3) == "zpg" and "store_zpg" or "store_mem")
                     end
                 else
                     send_args = args

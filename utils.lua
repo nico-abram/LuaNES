@@ -2,7 +2,7 @@ UTILS = {}
 local UTILS = UTILS
 
 function UTILS.isDefined(v)
-    return v and v ~= CPU.UNDEFINED
+    return v and v ~= CPU.UNDEFINED and v or nil
 end
 
 function UTILS.bind(f, param)
@@ -13,31 +13,34 @@ end
 
 function UTILS.tSetter(t)
     return function(i, v)
-        t.ram[i] = v
+        if i == 0x07FF or i == 0x07FF - 1 or i == 0x07FF + 1 then
+            print "MAGIC"
+        end
+        t[i] = v
     end
 end
-function UTILS.tGetter(t)
+function UTILS.tGetter(t, offs)
     return function(i)
-        return t[i + 1]
+        return t[i + (offs or 1)]
     end
 end
 function UTILS.map(t, f)
     local tt = {}
-    for i = 1, #t do
+    for i = t[0] and 0 or 1, #t do
         tt[i] = f(t[i])
     end
     return tt
 end
-function UTILS.fill(t, v, n, step)
-    for i = 1, math.max(#t, n or 0), step or 1 do
-        t[i] = v
+function UTILS.fill(t, v, n, step, offs)
+    for i = t[0] and 0 or 1, math.max(#t, n or 0), step or 1 do
+        t[i + (offs or 0)] = v
     end
     return t
 end
 function UTILS.rotate(t, r)
     local rotated = {}
     local size = #t
-    for i = 1, size do
+    for i = t[0] and 0 or 1, size do
         local idx = i + r
         idx = idx > size and idx - size or (idx < 1 and idx + size or idx)
         rotated[i] = t[idx]
@@ -56,10 +59,10 @@ function UTILS.transpose(t)
         return tt
     end
     local ttSize = #(t[1])
-    for i = 1, ttSize do
+    for i = t[1][0] and 0 or 1, ttSize do
         local ttt = {}
         tt[i] = ttt
-        for j = 1, #t do
+        for j = t[0] and 0 or 1, #t do
             ttt[j] = t[j][i]
         end
     end
@@ -67,16 +70,19 @@ function UTILS.transpose(t)
 end
 function UTILS.range(a, b, step)
     local t = {}
-    for i = 1, b - a, step or 1 do
-        t[i] = a + i - 1
+    for i = 0, b - a + 1, step or 1 do
+        t[i] = a + i
     end
     return t
+end
+function UTILS.printf(...)
+    print(string.format(...))
 end
 function UTILS.copy(t, n, offset, step)
     local tt = {}
     n = n or #t
     offset = offset or 0
-    for i = 1, n, step or 1 do
+    for i = t[0] and 0 or 1, n, step or 1 do
         tt[i] = t[i + offset]
     end
     return tt
@@ -96,7 +102,7 @@ function UTILS.dump(o)
     end
 end
 function UTILS.all(t, f)
-    for i = 1, #t do
+    for i = t[0] and 0 or 1, #t do
         if not f(t[i]) then
             return false
         end
@@ -106,8 +112,10 @@ end
 function UTILS.flat_map(t, f)
     t = UTILS.map(t, f)
     local tt = {}
-    for i, st in ipairs(t) do
-        for i, v in ipairs(st) do
+    for j = t[0] and 0 or 1, #t do
+        local st = t[j]
+        for i = t[0] and 0 or 1, #st do
+            local v = st[i]
             tt[#tt + 1] = v
         end
     end
@@ -121,7 +129,7 @@ end
 function UTILS.uniq(t)
     local tt = {}
     local done = {}
-    for i = 1, #t do
+    for i = t[0] and 0 or 1, #t do
         local x = t[i]
         if not done[x] then
             tt[#tt + 1] = x
@@ -131,7 +139,22 @@ function UTILS.uniq(t)
     return tt
 end
 local p = print
+local f
 function UTILS.print(x)
-    p(UTILS.dump(x))
+    if not asdasdasd then
+        asdasdasd = 1
+        local ff = assert(io.open("logs.txt", "w"))
+        ff:write("\n")
+        ff:close()
+        f = assert(io.open("logs.txt", "a"))
+    end
+    local str = UTILS.dump(x)
+    f:write("\n" .. str)
+    p(str)
 end
-print = UTILS.print
+function UTILS:import()
+    local e = getfenv(2)
+    for k, v in pairs(UTILS) do
+        e[k] = v
+    end
+end

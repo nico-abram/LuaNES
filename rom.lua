@@ -7,30 +7,11 @@ ROM.MAPPER_DB = {
     [0x00] = ROM
 }
 
-local nthBitIsSet = UTILS.nthBitIsSet
-local isDefined = UTILS.isDefined
-local bind = UTILS.bind
-local tSetter = UTILS.tSetter
-local tGetter = UTILS.tGetter
-local fill = UTILS.fill
-local range = UTILS.range
-local map = UTILS.map
-local flat_map = UTILS.flat_map
-local uniq = UTILS.uniq
-local clear = UTILS.clear
-local all = UTILS.all
-local copy = UTILS.copy
-local nthBitIsSetInt = UTILS.nthBitIsSetInt
-local transpose = UTILS.transpose
+UTILS:import()
 
 function ROM:initialize(conf, cpu, ppu, basename, bytes, str)
     self.conf = conf or {}
-    self.cpu =
-        cpu or
-        {
-            add_mappings = function()
-            end
-        }
+    self.cpu = cpu
     self.ppu =
         ppu or
         {
@@ -57,7 +38,7 @@ function ROM:initialize(conf, cpu, ppu, basename, bytes, str)
         end
     end
 
-    if #bytes < 0x2000 * chr_count then
+    if #bytes < 0x2000 * chr_count + 0x4000 * prg_count then
         error "EOF in CHR bank data"
     end
     self.chr_banks = {}
@@ -194,21 +175,32 @@ function ROM:parse_header(buf, str)
     if #buf < 16 then
         error "Missing 16-byte header"
     end
-    if str:sub(1, 4) ~= "NES\x1a" then
+    local header = {
+        check = str:sub(1, 4),
+        trainer = nthBitIsSet(buf[7], 2),
+        VS = nthBitIsSet(buf[8], 0),
+        PAl = nthBitIsSet(buf[10], 0),
+        prg_pages = buf[5],
+        chr_pages = buf[6],
+        battery = nthBitIsSet(buf[7], 1),
+        mapper = bit.bor(bit.rshift(buf[7], 4), bit.band(buf[8], 0xf0)),
+        mapping = not nthBitIsSet(buf[7], 0) and "horizontal" or "vertical"
+    }
+    if header.check ~= "NES\x1a" then
         error "Missing 'NES' constant in header"
     end
-    if nthBitIsSet(buf[7], 2) then
+    if header.trainer then
         error "trainer not supported"
     end
-    if nthBitIsSet(buf[8], 0) then
+    if header.VS then
         error "VS cart not supported"
     end
-    if nthBitIsSet(buf[10], 0) then
+    if header.PAL then
         error "PAL not supported"
     end
 
-    local prg_banks = buf[5]
-    local chr_banks = buf[6]
+    local prg_banks = buf[5] -- program page count
+    local chr_banks = buf[6] --vrom page count
     self.mirroring = not nthBitIsSet(buf[7], 0) and "horizontal" or "vertical"
     if nthBitIsSet(buf[7], 3) then
         self.mirroring = "four_screen"

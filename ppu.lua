@@ -8,22 +8,7 @@ function PPU:new(conf, cpu, palette)
     ppu:initialize(conf, cpu, palette)
     return ppu
 end
-local nthBitIsSet = UTILS.nthBitIsSet
-local isDefined = UTILS.isDefined
-local bind = UTILS.bind
-local tSetter = UTILS.tSetter
-local tGetter = UTILS.tGetter
-local fill = UTILS.fill
-local range = UTILS.range
-local rotate = UTILS.rotate
-local map = UTILS.map
-local flat_map = UTILS.flat_map
-local uniq = UTILS.uniq
-local clear = UTILS.clear
-local all = UTILS.all
-local copy = UTILS.copy
-local nthBitIsSetInt = UTILS.nthBitIsSetInt
-local transpose = UTILS.transpose
+UTILS:import()
 
     -- clock/timing constants (stolen from Nestopia)
     PPU.RP2C02_CC         = 4
@@ -90,8 +75,8 @@ local transpose = UTILS.transpose
       self.cpu = cpu
       self.palette = palette
 
-      self.nmt_mem = {fill({}, 0xff,0x400),fill({}, 0xff,0x400)}--[  [0xff] * 0x400, [0xff] * 0x400]
-      self.nmt_ref = map({1, 2, 1, 2},function(i) return self.nmt_mem[i] end)
+      self.nmt_mem = {[0]=fill({}, 0xff,0x400,1,-1),[1]=fill({}, 0xff,0x400,1,-1)}--[  [0xff] * 0x400, [0xff] * 0x400]
+      self.nmt_ref = map({[0]=0, [1]=1, [2]=0, [3]=1},function(i) return self.nmt_mem[i] end)
 
       self.output_pixels = {}
       self.output_color = fill({},{self.palette[0]}, 0x20) -- palette size is 0x20
@@ -210,7 +195,7 @@ local transpose = UTILS.transpose
     end
 
     function PPU:update_output_color()
-      map(range(1,0x20), function(i)
+      map(range(1,0x20-1), function(i)
         self.output_color[i] = self.palette[bit.bor(bit.band(self.palette_ram[i] , self.coloring) , self.emphasis)]
       end)
     end
@@ -219,8 +204,8 @@ local transpose = UTILS.transpose
       self.lut_update ={}--{}.compare_by_identity
 
       self.name_lut = map(range(0,0xffff), function(i)
-        local nmt_bank = self.nmt_ref[bit.band(bit.rshift(i , 10) , 3)+1]
-        local nmt_idx = bit.band(i , 0x03ff)+1
+        local nmt_bank = self.nmt_ref[bit.band(bit.rshift(i , 10) , 3)]
+        local nmt_idx = bit.band(i , 0x03ff)
         local fixed = bit.bor(bit.band(bit.rshift(i , 12), 7) , bit.lshift( nthBitIsSetInt(i,15) , 12))
         -- WTF
         --(((self.lut_update[nmt_bank] or= [])[nmt_idx] or= [nil, nil])[0] or= []) << [i, fixed]
@@ -231,8 +216,8 @@ local transpose = UTILS.transpose
       self.attr_lut = map(range(0,0x7fff), function(i)
         local io_addr = bit.bor(0x23c0 , bit.bor(bit.band(i , 0x0c00) , bit.bor(bit.band(bit.rshift(i , 4) , 0x0038) ,
              bit.band(bit.rshift(i , 2), 0x0007))))
-        local nmt_bank = self.nmt_ref[bit.band(bit.rshift(io_addr , 10) , 3)+1]
-        local nmt_idx = bit.band(io_addr , 0x03ff)+1
+        local nmt_bank = self.nmt_ref[bit.band(bit.rshift(io_addr , 10) , 3)]
+        local nmt_idx = bit.band(io_addr , 0x03ff)
         local attr_shift = bit.bor(bit.band(i , 2) , bit.band(bit.rshift(i , 4) , 4))
         local key = tostring(io_addr).."-"..tostring(attr_shift)
         if not entries[key] then
@@ -315,8 +300,8 @@ local transpose = UTILS.transpose
         self.hclk_target = CPU.FOREVER_CLOCK
         self:run()
       end
-      while #(self.output_pixels) < 256 * 24 do
-      self.output_pixels[#(self.output_pixels)] = self.palette[15]  -- fill black
+      while #(self.output_pixels) < 256 * 240 do
+      self.output_pixels[#(self.output_pixels)+1] = self.palette[15]  -- fill black
       end
     end
 
@@ -373,9 +358,9 @@ local transpose = UTILS.transpose
 
     function PPU:make_sure_invariants()
       self.name_io_addr = bit.bor(bit.band(bit.bor(self.scroll_addr_0_4 , self.scroll_addr_5_14) , 0x0fff) , 0x2000)
-      self.bg_pattern_lut_fetched = PPU.TILE_LUT[
+      self.bg_pattern_lut_fetched = PPU.TILE_LUT[1+
         bit.band(bit.rshift(self.nmt_ref[bit.band(bit.rshift(self.io_addr, 10) , 3)][bit.band(self.io_addr , 0x03ff)],
-            bit.bor(bit.band(self.scroll_addr_0_4 , 0x2) , (self.scroll_addr_5_14[6] * 0x4))) , 3)
+            bit.bor(bit.band(self.scroll_addr_0_4 , 0x2) , (nthBitIsSetInt( self.scroll_addr_5_14,6) * 0x4))) , 3)
       ]
     end
 
@@ -909,7 +894,9 @@ if not self.any_show then       return end
         pixel = bit.band(self.scroll_addr_5_14 , 0x3f00) == 0x3f00 and self.scroll_addr_0_4 or 0
         self.bg_pixels[self.hclk % 8+1] = 0
       end
-      return bit.lshift(self.output_pixels, self.output_color[pixel])
+      local px = self.output_color[pixel]
+      --self.output_pixels[#(self.output_pixels)] = px
+      return px
     end
 
     -- just a placeholder; used for batch_render_pixels optimization
@@ -968,14 +955,14 @@ if hclk_target == CPU.FOREVER_CLOCK then hclk_target = "forever" end
 
     function PPU:run()
         if not self.fiber then
-            sself.fiber = coroutine.create(self.main_loop, self, 0)
+            self.fiber = coroutine.create(self.main_loop, self, 0)
         end
 
-       if self.conf.loglevel >= 3 then self:debug_logging(self.scanline, self.hclk, self.hclk_target) end
+       --if self.conf.loglevel >= 3 then self:debug_logging(self.scanline, self.hclk, self.hclk_target) end
 
       self:make_sure_invariants()
 
-      if not self.fiber.resume then self.hclk_target = (self.vclk + self.hclk) * PPU.RP2C02_CC end
+      if not coroutine.resume(self.fiber) then self.hclk_target = (self.vclk + self.hclk) * PPU.RP2C02_CC end
     end
 
     function PPU:wait_frame()
@@ -1033,7 +1020,7 @@ if hclk_target == CPU.FOREVER_CLOCK then hclk_target = "forever" end
 
       while true do
         -- pre-render scanline
-        for i=1,#range(341,589+1, 8) do
+        for i=1,#range(341,589, 8) do
         --341.step(589, 8) do
           -- when 341, 349, ..., 589
           if self.hclk == 341 then
@@ -1059,7 +1046,7 @@ if hclk_target == CPU.FOREVER_CLOCK then hclk_target = "forever" end
           self:wait_two_clocks()
         end
 
-        for i=1,#range(597,653+1, 8) do
+        for i=1,#range(597,653, 8) do
         --597.step(653, 8) do
           -- when 597, 605, ..., 653
           if self.any_show then
@@ -1202,7 +1189,7 @@ if hclk_target == CPU.FOREVER_CLOCK then hclk_target = "forever" end
           self:wait_zero_clocks()
 
           -- visible scanline (shown)
-        for i=1,#range(0,248+1, 8) do
+        for i=1,#range(0,248, 8) do
           --0.step(248, 8) do
             -- when 0, 8, ..., 248
             if self.any_show then
@@ -1281,7 +1268,7 @@ if hclk_target == CPU.FOREVER_CLOCK then hclk_target = "forever" end
             self:wait_one_clock()
           end
 
-            for i=1,#range(256,312+1, 8) do
+            for i=1,#range(256,312, 8) do
           --256.step(312, 8) do
             -- rubocop:disable Style/IdenticalConditionalBranches
             if self.hclk == 256 then
