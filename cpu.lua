@@ -1,3 +1,4 @@
+local UTILS = UTILS
 UTILS:import()
 
 local NES =
@@ -38,21 +39,14 @@ Dendy = 1773448}
 local UNDEFINED = CPU.UNDEFINED
 local CLK = CPU.CLK
 
-local nthBitIsSet = UTILS.nthBitIsSet
 local isDefined = UTILS.isDefined
 local bind = UTILS.bind
 local tSetter = UTILS.tSetter
 local tGetter = UTILS.tGetter
 local fill = UTILS.fill
 local range = UTILS.range
-local map = UTILS.map
-local flat_map = UTILS.flat_map
-local uniq = UTILS.uniq
-local clear = UTILS.clear
-local all = UTILS.all
-local copy = UTILS.copy
+local printf = UTILS.printf
 local nthBitIsSetInt = UTILS.nthBitIsSetInt
-local transpose = UTILS.transpose
 
 CPU.PokeNop = function()
 end
@@ -83,18 +77,20 @@ function CPU:next_frame_clock()
     return self.clk_next_frame
 end
 
-function CPU:next_frame_clock(x)
-    if x then
-        self.clk_next_frame = x
-        self.clk_target = x < self.clk_target and x or self.clk_target
-    end
-    return self.clk_next_frame
+function CPU:set_next_frame_clock(x)
+    self.clk_frame = x
+    self.clk_target = x < self.clk_target and x or self.clk_target
+    printf("set_next_frame_clock")
+    printf("%04X",x)
+    printf("%04X",self.clk_target)
+    return x
 end
 function CPU:current_clock()
     return self.clk
 end
 
 function CPU:peek_nop(addr)
+    --printf("PNOP:%02X",addr)
     return bit.rshift(addr, 8)
 end
 
@@ -120,14 +116,14 @@ function CPU:fetch(addr)
     if not getter  then
       printf("Error fetching %04X state:", addr)
       self:printState()
-      local range = 2
-      printf("Surroundings (range:%i):", range)
-      for i=addr-range,addr+range do
-        local getter = self._fetch[i]
-        if getter and (type(getter) ~= "table" or getter ~= UNDEFINED) then
-          printf("%04X %04x", i, getter(i))
+      local reach = 2
+      printf("Surroundings (range:%i):", reach)
+      for i=addr-range,addr+reach do
+        local getter2 = self._fetch[i]
+        if getter2 and (type(getter2) ~= "table" or getter2 ~= UNDEFINED) then
+          printf("%04X %04x", i, getter2(i))
         else
-          if not getter then
+          if not getter2 then
           printf("%04X NIL", i )
           else
           printf("%04X UNDEF", i )
@@ -136,6 +132,7 @@ function CPU:fetch(addr)
       end
       error(string.format("Error fetching %04X", addr))
     end
+    --print "ASD"
     --printf("%04X : %04X", addr, getter(addr))
     return getter and getter(addr) or nil
 end
@@ -196,15 +193,35 @@ function CPU:reset()
     self.clk_total = 0
     self:add_mappings(range(0x0000, 0x07ff), tGetter(self.ram,0), tSetter(self.ram))
     self:add_mappings(range(0x0800, 0x1fff), bind(self.peek_ram, self), bind(self.poke_ram, self))
-    self:add_mappings(range(0x2000, 0xffff), bind(self.peek_nop, self), UNDEFINED)
-    self:add_mappings(0xfffc, bind(self.peek_jam_1, self), UNDEFINED)
-    self:add_mappings(0xfffd, bind(self.peek_jam_2, self), UNDEFINED)
+    self:add_mappings(range(0x2000, 0xffff), bind(self.peek_nop, self), UNDEFINED) -- 8 PPU registers mirrored
+    --self:add_mappings(0xfffc, bind(self.peek_jam_1, self), UNDEFINED)
+    --self:add_mappings(0xfffd, bind(self.peek_jam_2, self), UNDEFINED)
+end
+
+function CPU:setpc()
+      self._pc = self.conf.pc or self:peek16(CPU.RESET_VECTOR)
+      --[[
+      print "RERERERE"
+      printf("%04X",self:fetch(CPU.RESET_VECTOR-1))
+      print "RERERERE"
+      printf("%04X",self:fetch(CPU.RESET_VECTOR))
+      print "RERERERE"
+      printf("%04X",self:fetch(CPU.RESET_VECTOR+1))
+      print "RERERERE"
+      printf("%04X",self._pc)
+      print "RERERERE"
+      printf("%04X",self:peek16(CPU.RESET_VECTOR-1))
+      print "RERERERE"
+      printf("%04X",self:peek16(CPU.RESET_VECTOR+1))
+      print "RERERERE"
+      printf("%04X",self:peek16(CPU.RESET_VECTOR+2))
+      ]]
 end
 
 function CPU:new(conf)
     local cpu = {}
     setmetatable(cpu, CPU._mt)
-    cpu.conf = conf or {loglevel=-1}
+    cpu.conf = conf or {loglevel=0,pc=nil}
     cpu.ram = fill({}, CPU.UNDEFINED, CPU.RAM_SIZE)
     cpu._store = fill({}, CPU.UNDEFINED, CPU.MAINMEM_SIZE)
     cpu._fetch = fill({}, CPU.UNDEFINED, CPU.MAINMEM_SIZE)
@@ -253,7 +270,8 @@ end
 
 function CPU:boot()
     self.clk = 0
-    self._pc = 0xC000 
+    --self._pc = 0xC000
+    self:setpc()
 end
 
 function CPU:vsync()
@@ -445,7 +463,7 @@ end
 -- immediate addressing (read only)
 function CPU:imm(_read, _write)
     self.data = self:fetch(self._pc)
-      printf( "%02X" ,self._pc)
+      --printf( "%02X" ,self._pc)
     self._pc = self._pc + 1
     self.clk = self.clk + CLK[2]
 end
@@ -494,9 +512,18 @@ end
 
 -- absolute indexed addressing
 function CPU:abs_reg(indexed, read, write)
-    local addr = self._pc
+    local addr = self._pc +1
+  --printf("pc:%02X", self._pc)
     local i = indexed + self:fetch(self._pc)
+    --[[
+  printf("addr:%02X", self.addr)
+  printf("idxd:%02X", indexed)
+  printf("postpc:%02X", self._pc)
+  printf("i:%02X", i)
+  printf("laddr:%02X", addr)
+  ]]
     self.addr = bit.band(bit.lshift(self:fetch(addr), 8) + i, 0xffff)
+  --printf("postaddr%02X", self.addr)
     if write then
         addr = bit.band(self.addr - bit.band(i, 0x100), 0xffff)
         self:fetch(addr)
@@ -509,6 +536,7 @@ function CPU:abs_reg(indexed, read, write)
             self.clk = self.clk + CLK[1]
         end
     end
+  --printf("%02X", addr)
     self:read_write(read, write)
     self._pc = self._pc + 2
 end
@@ -551,7 +579,6 @@ function CPU:ind_y(read, write)
     return self:read_write(read, write)
 end
 
-  
     function CPU:read_write(read, write)
       if read then
         --print(string.format("%04X",self.addr))
@@ -569,17 +596,17 @@ end
 
     -- load instructions
     function CPU:_lda()
-      printf("%02X",self.data)
+      --printf("%02X",self.data)
       self._p_nz = self.data
       self._a = self.data
     end
 
     function CPU:_ldx()
-      printf("%02X",self.data)
+      --printf("%02X",self.data)
       self._p_nz = self.data
       self._x = self.data
-      printf("%02X",self._x)
-      printf("%02X",self._p_nz)
+      --printf("%02X",self._x)
+      --printf("%02X",self._p_nz)
     end
 
     function CPU:_ldy()
@@ -984,15 +1011,35 @@ end
     end
 
     function CPU:_rra()
+      --[[
+      local p = 0x647
+      local ad = self.addr
+      local pc = self._p_c
+      self.addr = p
       local c = bit.lshift(self._p_c ,7)
       self._p_c = bit.band(self.data , 1)
       self.data = bit.bor(bit.rshift(self.data ,1), c)
-      printf("%02X", self:fetch(self.addr))
       printf("%02X", self.addr)
+      printf("%02X", self:fetch(self.addr))
       printf("%02X", c)
       printf("%02X", self.data)
       printf("%02X", self._p_c)
       printf("%02X", self.data)
+      self.addr = ad
+      self._p_c = p
+      ]]
+      local c = bit.lshift(self._p_c ,7)
+      self._p_c = bit.band(self.data , 1)
+      self.data = bit.bor(bit.rshift(self.data ,1), c)
+       --[[
+      printf("%02X", self.addr)
+      printf("%02X", self.addr)
+      printf("%02X", self:fetch(self.addr))
+      printf("%02X", c)
+      printf("%02X", self.data)
+      printf("%02X", self._p_c)
+      printf("%02X", self.data)
+      ]]
       return self:_adc()
     end
 
@@ -1074,8 +1121,9 @@ end
     --------------------------------------------------------------------------------------------------------------------
     -- default core
     function CPU:printState()
-      print(string.format("PC:%04X OP:%02X %02X %02X %s %02X A:%02X X:%02X Y:%02X P:%02X SP:%02X CYC:%3d" , 
-         self._pc,self.opcode or 0,self:fetch(self._pc+1),self:fetch(self._pc+2),table.concat(CPU.DISPATCH[self.opcode] or {}, " "),self.data,
+      print(string.format("PC:%04X OP:%02X %02X %02X %s %02X %04X \t A:%02X X:%02X Y:%02X P:%02X SP:%02X CYC:%3d" ,
+         self._pc,self.opcode or 0,self:fetch(self._pc+1),self:fetch(self._pc+2),
+         table.concat(CPU.DISPATCH[self.opcode] or {}, " "),self.data,self.addr,
          self._a, self._x, self._y, self:flags_pack(), self._sp, self.clk / 4 % 341
       ))
     end
@@ -1110,8 +1158,14 @@ end
 
     function CPU:do_clock()
       local clock = self.apu:do_clock()
+      printf("%04X",clock)
 
        if clock > self.clk_frame then clock = self.clk_frame end
+      printf("%04X",clock)
+      printf("%04X",self.clk_nmi)
+      printf("%04X",self.clk_irq)
+      print(self.clk < self.clk_nmi)
+      print(self.clk < self.clk_irq)
 
       if self.clk < self.clk_nmi then
         if clock > self.clk_nmi then clock = self.clk_nmi end
@@ -1142,14 +1196,12 @@ end
           self._pc =self._pc + 1
 
           local operationData = CPU.DISPATCH[self.opcode]
-          if not operationData then
-          end
             local f = operationData[1]
-            self[f](self, unpack(operationData, 2))
+              self[f](self, unpack(operationData, 2))
 
           if self.ppu_sync then self.ppu.sync(self.clk)  end
           asd = asd+1
-          if asd > 10000 then
+          if asd > 100 then
             error "asd"
           end
     end
@@ -1158,9 +1210,17 @@ end
       repeat
         repeat
           self:run_once()
+          printf("STEP1")
+          printf("%04X", self.clk)
+          printf("%04X", self.clk_target)
+          printf("%04X", self.clk_frame)
         until self.clk < self.clk_target
         self:do_clock()
+          printf("STEP2")
+          printf("%04X", self.clk_target)
     until self.clk < self.clk_frame
+          printf("STEP3")
+          printf("%04X", self.clk_frame)
     end
 
     CPU.ADDRESSING_MODES = {

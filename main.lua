@@ -13,20 +13,16 @@ function love.load()
     love.graphics.rectangle("fill", 0, 0, 100, 100)
     love.graphics.setCanvas()
     love.window.setTitle("Title Goes Here...")
-    Nes = NES:new("tests/nestest.nes")
-    Nes:run()
+    --Nes = NES:new({file="tests/hello.nes", loglevel=5})
+    Nes = NES:new({file="tests/nestest.nes", loglevel=5,pc=0xC000})
+    --Nes:run()
     Nes:reset()
 end
 
+local t = 0
 function love.draw()
-    Nes.cpu.ppu:setup_frame()
-    Nes.cpu:run_once()
-    Nes.cpu.ppu:vsync()
-    Nes.cpu.apu:vsync()
-    Nes.cpu:vsync()
-    Nes.rom:vsync()
-
-    Nes.frame = Nes.frame + 1
+    Nes:run_once()
+    print "YEYEYEYEYE"
     -- very important!: reset color before drawing to canvas to have colors properly displayed
     -- see discussion here: https://love2d.org/forums/viewtopic.php?f=4&p=211418#p211418
     love.graphics.setColor(1, 1, 1, 1)

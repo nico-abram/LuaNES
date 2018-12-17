@@ -292,7 +292,8 @@ UTILS:import()
       self.odd_frame = not self.odd_frame
       local t  = self.hclk == PPU.HCLOCK_DUMMY and
         PPU.DUMMY_FRAME or PPU.BOOT_FRAME
-        self.vclk, self.hclk_target, self.cpu.next_frame_clock = t[1],t[2],t[3]
+        self.vclk, self.hclk_target = t[1],t[2]
+        self.cpu:set_next_frame_clock(t[3])
     end
 
     function PPU:vsync()
@@ -512,8 +513,8 @@ local        xfine = 8 - bit.band(data, 0x7)
         self.palette_ram[addr] = data
         self.output_color[addr] = final
         if bit.band(addr , 3) == 0 then
-          self.palette_ram[addr ^ 0x10] = data
-          self.output_color[addr ^ 0x10] = final
+          self.palette_ram[bit.bxor(addr, 0x10)] = data
+          self.output_color[bit.bxor(addr, 0x10)] = final
         end
         self.output_bg_color = bit.band(self.palette_ram[0] , 0x3f)
       else
@@ -609,7 +610,7 @@ return       self:update_address_line()
 
     function PPU:open_sprite(buffer_idx)
       local flip_v = self.sp_buffer[buffer_idx + 2][7] -- OAM byte2 bit7: "Flip vertically" flag
-      local tmp = (self.scanline - self.sp_buffer[buffer_idx]) ^ (flip_v * 0xf)
+      local tmp = bit.bxor((self.scanline - self.sp_buffer[buffer_idx]) , (flip_v * 0xf))
       local byte1 = self.sp_buffer[buffer_idx + 1]
       local addr = self.sp_height == 16 and bit.bor(bit.lshift(bit.band(byte1 , 0x01) , 12) , bit.bor(bit.lshift(bit.band(byte1 , 0xfe) , 4) , (tmp[3] * 0x10))) or bit.bor(self.sp_base ,bit.lshift( byte1 , 4))
       return bit.bor(addr , bit.band(tmp , 7))
@@ -694,8 +695,8 @@ return       self:update_address_line()
         self.name_io_addr =self.name_io_addr + 1 -- make cache consistent
       else
         self.scroll_addr_0_4 = 0
-        self.scroll_addr_5_14 =self.scroll_addr_5_14 ^ 0x0400
-        self.name_io_addr =  self.name_io_addr ^ 0x041f -- make cache consistent
+        self.scroll_addr_5_14 =bit.bxor(self.scroll_addr_5_14, 0x0400)
+        self.name_io_addr =  bit.bxor(self.name_io_addr, 0x041f) -- make cache consistent
       end
     end
 
@@ -713,7 +714,7 @@ return       self:update_address_line()
       else
         local mask = bit.band (self.scroll_addr_5_14 ,0x03e0)
         if mask == 0x03a0 then
-          self.scroll_addr_5_14 =self.scroll_addr_5_14 ^ 0x0800
+          self.scroll_addr_5_14 =bit.bxor(self.scroll_addr_5_14 , 0x0800)
           self.scroll_addr_5_14 =bit.band(self.scroll_addr_5_14 , 0x0c00)
         elseif mask == 0x03e0 then
           self.scroll_addr_5_14 =bit.band(self.scroll_addr_5_14 , 0x0c00)
@@ -1163,7 +1164,7 @@ if hclk_target == CPU.FOREVER_CLOCK then hclk_target = "forever" end
           -- when 337
           if self.any_show then
             self:update_enabled_flags_edge()
-            if self.scanline == PPU.SCANLINE_HDUMMY and self.odd_frame then self.cpu.next_frame_clock = PPU.RP2C02_HVSYNC_1 end
+            if self.scanline == PPU.SCANLINE_HDUMMY and self.odd_frame then self.cpu:set_next_frame_clock(PPU.RP2C02_HVSYNC_1) end
           end
           self:wait_one_clock()
 

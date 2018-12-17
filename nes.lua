@@ -14,12 +14,13 @@ NES._mt = {__index = NES}
 function NES:reset()
     self.audio, self.video, self.input = {spec = {}}, {palette = {}}, {}
 
-    self.cpu:reset()
-    self.cpu.apu:reset(self.audio.spec)
-    self.cpu.ppu:reset(self.video.palette)
+    local cpu = self.cpu
+    cpu:reset()
+    cpu.apu:reset(self.audio.spec)
+    cpu.ppu:reset(self.video.palette)
     self.rom:reset()
     self.pads:reset()
-    local cpu = self.cpu
+    cpu:setpc()
     cpu:boot()
     self.rom:load_battery()
 end
@@ -39,11 +40,12 @@ function NES:run()
         self:run_once()
     end
 end
-function NES:new(file)
-    local conf = {romfile = file, loglevel = 5}
+function NES:new(opts)
+    opts = opts or {}
+    local conf = {romfile = opts.file, pc = opts.pc or nil, loglevel = opts.loglevel or 0}
     local nes = {}
     setmetatable(nes, NES._mt)
-    nes.cpu = CPU.new()
+    nes.cpu = CPU:new(conf)
     nes.cpu.apu = {
         clock_dma = function(clk)
         end,

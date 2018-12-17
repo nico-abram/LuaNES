@@ -13,9 +13,6 @@ end
 
 function UTILS.tSetter(t)
     return function(i, v)
-        if i == 0x07FF or i == 0x07FF - 1 or i == 0x07FF + 1 then
-            print "MAGIC"
-        end
         t[i] = v
     end
 end
@@ -140,17 +137,18 @@ function UTILS.uniq(t)
 end
 local p = print
 local f
+local asdasdasd
 function UTILS.print(x)
     if not asdasdasd then
         asdasdasd = 1
         local ff = assert(io.open("logs.txt", "w"))
-        ff:write("\n")
+        ff:write("")
         ff:close()
         f = assert(io.open("logs.txt", "a"))
     end
     local str = UTILS.dump(x)
-    f:write("\n" .. str)
-    p(str)
+    f:write(str.."\n")
+    --p(str)
 end
 function UTILS:import()
     local e = getfenv(2)

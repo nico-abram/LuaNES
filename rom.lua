@@ -26,24 +26,24 @@ function ROM:initialize(conf, cpu, ppu, basename, bytes, str)
         prg_count, chr_count, wrk_count = self:parse_header({unpack(bytes, idx + 1, idx + header_size)}, str)
         idx = header_size
     end
-    if #bytes < 0x4000 * prg_count then
-        error "EOF in ROM bank data"
-    end
     self.prg_banks = {}
     do
         local prg_bank_size = 0x4000
+        if #bytes < prg_bank_size * prg_count then
+            error "EOF in ROM bank data"
+        end
         for i = 1, prg_count do
             self.prg_banks[i] = copy(bytes, prg_bank_size, idx)
             idx = idx + prg_bank_size
         end
     end
 
-    if #bytes < 0x2000 * chr_count + 0x4000 * prg_count then
-        error "EOF in CHR bank data"
-    end
     self.chr_banks = {}
     do
         local chr_bank_size = 0x2000
+        if #bytes < chr_bank_size * chr_count + 0x4000 * prg_count then
+            error "EOF in CHR bank data"
+        end
         for i = 1, chr_count do
             self.chr_banks[i] = copy(bytes, chr_bank_size, idx)
             idx = idx + chr_bank_size
@@ -51,13 +51,16 @@ function ROM:initialize(conf, cpu, ppu, basename, bytes, str)
     end
     self.prg_ref = {}
     fill(self.prg_ref, 0, 0x10000)
-    for i = 0x8000 + 1, 0x4000 + 0x8000 + 1 do
+    for i = 0x8000 + 1, 0x4000 + 0x8000 do
         self.prg_ref[i] = self.prg_banks[1][i - 0x8000]
     end
-    for i = 0xc000 + 1, 0x4000 + 0xc000 + 1 do
+    for i = 0xc000 + 1, 0x4000 + 0xc000 do
         self.prg_ref[i] = self.prg_banks[#(self.prg_banks)][i - 0xc000]
     end
     --[[
+    UTILS.print("rominit")
+    UTILS.printf("%04x", self.prg_ref[0xfffd])
+    UTILS.printf("%04x", self.prg_ref[0xfffd - 0x8000])
     UTILS.print("rominit")
     UTILS.print(self.prg_ref[0x8000 + 1])
     UTILS.print(self.prg_banks[1][1])
@@ -95,7 +98,23 @@ function ROM:init()
 end
 
 function ROM:reset()
-    self.cpu:add_mappings(range(0x8000, 0xffff), tGetter(self.prg_ref), CPU.UNDEFINED)
+    local n = #(self.prg_banks)
+    --[[
+    print("BANKS")
+    print(n)
+    UTILS.printf("%04x",self.prg_ref[0xfffd])
+    UTILS.printf("%04x",self.prg_ref[0xfffd-1])
+    UTILS.printf("%04x",self.prg_ref[0xfffd-2])
+    UTILS.printf("%04x",self.prg_ref[0xfffd-3])
+    UTILS.printf("%04x",self.prg_ref[0xfffd])
+    UTILS.printf("%04x",self.prg_ref[0xfffd-0x4000])
+    UTILS.printf("%04x",self.prg_ref[0xfffd-0x8000])
+    ]]
+    self.cpu:add_mappings(
+        range(0x8000, math.ceil(0x8000 + (0xffff - 0x8000) / n)),
+        tGetter(self.prg_ref),
+        CPU.UNDEFINED
+    )
 end
 
 function ROM:inspect()
@@ -457,7 +476,7 @@ end
 function MMC3:update_prg(addr, bank)
     bank = bank % self.prg_banks.size
     if self.prg_bank_swap and addr[13] == 0 then
-        addr = addr ^ 0x4000
+        addr = bit.bxor( addr, 0x4000)
     end
     for i = addr + 1, addr + 0x2000 + 1 do
         self.prg_ref[i] = self.prg_banks[bank][i - addr]
@@ -474,7 +493,7 @@ function MMC3:update_chr(addr, bank)
         return
     end
     if self.chr_bank_swap then
-        addr = addr ^ 0x1000
+        addr = bit.bxor(addr, 0x1000)
     end
     self.ppu:update(0)
     for i = addr + 1, addr + 0x400 + 1 do
