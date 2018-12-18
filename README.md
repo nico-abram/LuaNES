@@ -1,5 +1,5 @@
 # luacarrot
-NES emulator in lua+love based/insprised on optcarrot (https://github.com/mame/optcarrot).
+NES emulator in lua+love based/inspired on optcarrot (https://github.com/mame/optcarrot).
 A lot of things are just manually "translated" code from ruby.
 
 # Overview
