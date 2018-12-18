@@ -59,7 +59,7 @@ Things to notice if you compare with optcarrot:
 
 f[a,b] on functions calls (f(a,b))
 
-n[x] on numbers is equivalent to UTILS.
+n[x] on numbers is equivalent to UTILS.nthBitIsSetInt(n,x)
 
 ^ between 2 numbers is a binary xor
 
