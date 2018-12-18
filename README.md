@@ -58,10 +58,18 @@ Pads (Generic input component, iirc 1 or 2 memory addresses per pad or something
 Things to notice if you compare with optcarrot:
 
 f[a,b] on functions calls (f(a,b))
+
 n[x] on numbers is equivalent to UTILS.
+
 ^ between 2 numbers is a binary xor
+
 luajit doesnt support binary operators
+
 lua indexing normally starts at 1. A couple things might use 0-indexing since it made things easier with the current model. Once everything is more or less working as intended normalizing all table indexing should be considered.I've tried to avoid using ipairs, since according to a page on luajit performance tricks they can make things slower, and doing so allows me to make the array/numeric table functions in UTILS work for both 0 and 1 indexed tables by doing "t[0] and 0 or 1" for the first index
+
 ruby indexing starts at 0
+
 << is an lshift for 2 numbers, but "[]<< x" inserts x into the [] object
+
 ruby fibers are *quite* similar to lua coroutines (Used for PPU)
+
