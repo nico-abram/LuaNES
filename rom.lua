@@ -1,4 +1,4 @@
-local serpent = require("serpent")
+local serpent = require("libs/serpent")
 ROM = {}
 local ROM = ROM
 ROM._mt = {__index = ROM}
@@ -476,7 +476,7 @@ end
 function MMC3:update_prg(addr, bank)
     bank = bank % self.prg_banks.size
     if self.prg_bank_swap and addr[13] == 0 then
-        addr = bit.bxor( addr, 0x4000)
+        addr = bit.bxor(addr, 0x4000)
     end
     for i = addr + 1, addr + 0x2000 + 1 do
         self.prg_ref[i] = self.prg_banks[bank][i - addr]

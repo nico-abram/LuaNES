@@ -1,4 +1,4 @@
-require "serpent"
+require "libs/serpent"
 require "utils"
 require "cpu"
 require "ppu"
