@@ -2,6 +2,10 @@
 NES emulator in lua+love based/inspired on optcarrot (https://github.com/mame/optcarrot).
 A lot of things are just manually "translated" code from ruby.
 
+# Running
+
+Get https://love2d.org/ and run `love .` in the repo folder. Right now you need to fiddle with parameters passed to NEW:new in main.lua to change file used and/or starting instruction pointer (pc, program counter)
+
 # Overview
 
 The NES basically has 3 "main" or big components: the PPU (Picture Processing Unit), CPU and APU (Audio Processing Unit).
