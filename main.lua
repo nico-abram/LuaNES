@@ -18,15 +18,8 @@ function love.load(arg)
     Nes:reset()
 end
 
-local t = 0
 function love.draw()
-    print(
-        UTILS.timeF(
-            function()
-                Nes:run_once()
-            end
-        )
-    )
+    Nes:run_once()
     print "YEYEYEYEYE"
     local pxs = Nes.cpu.ppu.output_pixels
     local max = 0

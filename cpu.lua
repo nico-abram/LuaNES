@@ -1238,7 +1238,7 @@ function CPU:run_once()
         self.ppu.sync(self.clk)
     end
     asd = asd + 1
-    if asd > 100 then
+    if asd > 1000 then
         error "asd"
     end
 end

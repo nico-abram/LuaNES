@@ -144,11 +144,10 @@ function UTILS.uniq(t)
     return tt
 end
 local p = print
-local f
+local f = nil
 local asdasdasd
 function UTILS.print(x)
-    if not asdasdasd then
-        asdasdasd = 1
+    if not f then
         local ff = assert(io.open("logs.txt", "w"))
         ff:write("")
         ff:close()
@@ -156,11 +155,27 @@ function UTILS.print(x)
     end
     local str = UTILS.dump(x)
     f:write(str .. "\n")
+    --f:flush()
     --p(str)
 end
 function UTILS.import(t)
     local e = getfenv(2)
     for k, v in pairs(t) do
         e[k] = v
+    end
+end
+
+function UTILS.class(daddy)
+    local class = {}
+    setmetatable(class, {__index = daddy})
+    class._parent = daddy
+    class._mt = {__index = class}
+    function class:new(...)
+        local instance = {}
+        setmetatable(instance, class._mt)
+        if instance.initialize then
+            instance:initialize(...)
+        end
+        return instance
     end
 end
