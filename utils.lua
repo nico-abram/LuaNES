@@ -147,12 +147,12 @@ function UTILS.print(x)
         f = assert(io.open("logs.txt", "a"))
     end
     local str = UTILS.dump(x)
-    f:write(str.."\n")
+    f:write(str .. "\n")
     --p(str)
 end
-function UTILS:import()
+function UTILS.import(t)
     local e = getfenv(2)
-    for k, v in pairs(UTILS) do
+    for k, v in pairs(t) do
         e[k] = v
     end
 end

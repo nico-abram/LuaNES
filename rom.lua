@@ -3,6 +3,11 @@ ROM = {}
 local ROM = ROM
 ROM._mt = {__index = ROM}
 
+--[[
+    There are different ROM mappers that map the ROM PRG and CHR memory to CP addresses.
+    There's a code in the header for each mapper. MAPPER_DB is a mapping of codes into ROM classes.
+    The base class uses the most common one (NROM).
+]]
 ROM.MAPPER_DB = {
     [0x00] = ROM
 }
