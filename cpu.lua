@@ -83,9 +83,11 @@ end
 function CPU:set_next_frame_clock(x)
     self.clk_frame = x
     self.clk_target = x < self.clk_target and x or self.clk_target
+    --[[
     printf("set_next_frame_clock")
     printf("%04X", x)
     printf("%04X", self.clk_target)
+    ]]
     return x
 end
 function CPU:current_clock()
@@ -1181,16 +1183,18 @@ end
 
 function CPU:do_clock()
     local clock = self.apu:do_clock()
-    printf("%04X", clock)
+    --printf("%04X", clock)
 
     if clock > self.clk_frame then
         clock = self.clk_frame
     end
+    --[[
     printf("%04X", clock)
     printf("%04X", self.clk_nmi)
     printf("%04X", self.clk_irq)
     print(self.clk < self.clk_nmi)
     print(self.clk < self.clk_irq)
+    ]]
 
     if self.clk < self.clk_nmi then
         if clock > self.clk_nmi then
@@ -1224,12 +1228,12 @@ function CPU:run_once()
 
     self._pc = self._pc + 1
 
-    CPU.DISPATCHER[self.opcode](self)
     --[[
+    CPU.DISPATCHER[self.opcode](self)
+    ]]
     local operationData = CPU.DISPATCH[self.opcode]
     local f = operationData[1]
     self[f](self, unpack(operationData, 2))
-    ]]
     if self.ppu_sync then
         self.ppu.sync(self.clk)
     end
@@ -1243,17 +1247,23 @@ function CPU:run()
     repeat
         repeat
             self:run_once()
+            --[[
             printf("STEP1")
             printf("%04X", self.clk)
             printf("%04X", self.clk_target)
             printf("%04X", self.clk_frame)
+            ]]
         until self.clk < self.clk_target
+            --[[
         self:do_clock()
         printf("STEP2")
         printf("%04X", self.clk_target)
+        ]]
     until self.clk < self.clk_frame
+            --[[
     printf("STEP3")
     printf("%04X", self.clk_frame)
+    ]]
 end
 
 CPU.ADDRESSING_MODES = {
@@ -1396,7 +1406,6 @@ op({0x0c}, {"no_op", "_nop", 2, 4})
 op({0x1c, 0x3c, 0x5c, 0x7c, 0xdc, 0xfc}, {"r_op", "_nop", "ctl"})
 --[[
   Thiss aims to "cache" unpack (Maybe also "cache" self and op indexing?)
-]]
 CPU.DISPATCHER = {}
 for k, v in pairs(CPU.DISPATCH) do
   local op = v[1]
@@ -1428,5 +1437,6 @@ for k, v in pairs(CPU.DISPATCH) do
   end
   CPU.DISPATCHER[k] = cacheF
 end
+]]
 
 return CPU

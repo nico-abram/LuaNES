@@ -11,6 +11,14 @@ function UTILS.bind(f, param)
     end
 end
 
+function UTILS.timeF(f, n)
+    local t = os.clock()
+    for i = 1, n or 1 do
+        f()
+    end
+    return os.clock() - t
+end
+
 function UTILS.tSetter(t)
     return function(i, v)
         t[i] = v

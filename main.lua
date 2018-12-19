@@ -3,29 +3,31 @@ Nes = nil
 local width = 256
 local height = 240
 local pixSize = 2
-function love.load()
+function love.load(arg)
+    local file = arg[1] or " "
+    local loglvl = loadstring("return " .. (arg[2] or "0"))
+    loglvl = loglvl and loglvl()
+    local pc = loadstring("return " .. (arg[3] or ""))
+    pc = pc and pc()
     imageData = love.image.newImageData(width * pixSize + 1, height * pixSize + 1)
     image = love.graphics.newImage(imageData)
-    love.graphics.setCanvas(canvas)
-    love.graphics.clear()
-    love.graphics.setBlendMode("alpha")
-    love.graphics.setColor(1, 0, 0, 0.5)
-    love.graphics.rectangle("fill", 0, 0, 100, 100)
-    love.graphics.setCanvas()
-    love.window.setTitle("Title Goes Here...")
+    love.window.setTitle("LuaNEs")
     --Nes = NES:new({file="tests/hello.nes", loglevel=5})
-    Nes = NES:new({file="tests/nestest.nes", loglevel=5,pc=0xC000})
+    Nes = NES:new({file = file, loglevel = 0, pc = pc, loglevel = loglvl})
     --Nes:run()
     Nes:reset()
 end
 
 local t = 0
 function love.draw()
-    Nes:run_once()
+    print(
+        UTILS.timeF(
+            function()
+                Nes:run_once()
+            end
+        )
+    )
     print "YEYEYEYEYE"
-    -- very important!: reset color before drawing to canvas to have colors properly displayed
-    -- see discussion here: https://love2d.org/forums/viewtopic.php?f=4&p=211418#p211418
-    love.graphics.setColor(1, 1, 1, 1)
     local pxs = Nes.cpu.ppu.output_pixels
     local max = 0
     for i = 1, #pxs do
