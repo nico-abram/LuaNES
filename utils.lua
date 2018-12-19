@@ -83,6 +83,21 @@ end
 function UTILS.printf(...)
     print(string.format(...))
 end
+function UTILS.concat(...)
+    local args = {...}
+    if type(args[1]) == "table" then
+        local ct = {}
+        for j = 1, #args do
+            local t = args[j]
+            for i = 1, #t do
+                ct[#ct + 1] = t[i]
+            end
+        end
+        return ct
+    else
+        return table.concat(...)
+    end
+end
 function UTILS.copy(t, n, offset, step)
     local tt = {}
     n = n or #t
@@ -165,17 +180,21 @@ function UTILS.import(t)
     end
 end
 
-function UTILS.class(daddy)
+function UTILS.class(parent)
     local class = {}
-    setmetatable(class, {__index = daddy})
-    class._parent = daddy
+    if parent then
+        setmetatable(class, {__index = parent})
+        class._parent = parent
+    end
     class._mt = {__index = class}
     function class:new(...)
         local instance = {}
         setmetatable(instance, class._mt)
         if instance.initialize then
+            print "initC"
             instance:initialize(...)
         end
         return instance
     end
+    return class
 end

@@ -2,6 +2,7 @@ require "libs/serpent"
 require "utils"
 require "cpu"
 require "ppu"
+require "apu"
 require "rom"
 require "palette"
 
@@ -44,9 +45,11 @@ function NES:new(opts)
     opts = opts or {}
     local conf = {romfile = opts.file, pc = opts.pc or nil, loglevel = opts.loglevel or 0}
     local nes = {}
+    local palette = PALETTE:defacto_palette()
     setmetatable(nes, NES._mt)
     nes.cpu = CPU:new(conf)
-    nes.cpu.apu = {
+    nes.cpu.apu = APU:new(conf, nes.cpu)
+    --[[
         clock_dma = function(clk)
         end,
         reset = function()
@@ -57,6 +60,7 @@ function NES:new(opts)
             return CPU.CLK[1]
         end
     }
+    ]]
     --[[
     nes.cpu.ppu = {
         reset = function()
@@ -69,7 +73,7 @@ function NES:new(opts)
         end
     }
     --]]
-    nes.cpu.ppu = PPU:new(conf, nes.cpu, PALETTE:defacto_palette())
+    nes.cpu.ppu = PPU:new(conf, nes.cpu, palette)
     nes.pads = {
         reset = function()
         end
