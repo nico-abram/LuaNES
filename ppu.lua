@@ -268,6 +268,18 @@ function PPU:setup_lut()
             local fixed = bit.bor(bit.band(bit.rshift(i, 12), 7), bit.lshift(nthBitIsSetInt(i, 15), 12))
             -- WTF
             --(((self.lut_update[nmt_bank] or= [])[nmt_idx] or= [nil, nil])[0] or= []) << [i, fixed]
+            if not self.lut_update[nmt_bank] then
+                self.lut_update[nmt_bank] = {}
+            end
+            if not self.lut_update[nmt_bank][nmt_idx] then
+                self.lut_update[nmt_bank][nmt_idx] = {nil, nil}
+            end
+            local upd = self.lut_update[nmt_bank][nmt_idx]
+            if not upd[1] then
+                upd[1] = {}
+            end
+            upd = upd[1]
+            upd[#upd + 1] = {i, fixed}
             return bit.bor(bit.lshift(nmt_bank[nmt_idx], 4), fixed)
         end
     )
@@ -297,22 +309,17 @@ function PPU:setup_lut()
                 }
             end
             if not self.lut_update[nmt_bank] then
-                self.lut_update[nmt_bank] = {
-                    io_addr,
-                    PPU.TILE_LUT[bit.band(bit.rshift(nmt_bank[nmt_idx], attr_shift), 3)],
-                    attr_shift
-                }
-            end
-            if not self.lut_update[nmt_bank] then
                 self.lut_update[nmt_bank] = {}
             end
             if not self.lut_update[nmt_bank][nmt_idx] then
                 self.lut_update[nmt_bank][nmt_idx] = {nil, nil}
             end
-            if not self.lut_update[nmt_bank][nmt_idx][2] then
-                self.lut_update[nmt_bank][nmt_idx][2] = {}
+            local upd = self.lut_update[nmt_bank][nmt_idx]
+            if not upd[2] then
+                upd[2] = {}
             end
-            self.lut_update[nmt_bank][nmt_idx][2][#(self.lut_update[nmt_bank][nmt_idx][2])] = entries[key]
+            upd = upd[2]
+            upd[#upd + 1] = entries[key]
             --entries[key] or=
             --(((self.lut_update[nmt_bank] or= [])[nmt_idx] or= [nil, nil])[1] or= []) << entries[key]
             return entries[key]
@@ -454,17 +461,19 @@ end
 
 function PPU:make_sure_invariants()
     self.name_io_addr = bit.bor(bit.band(bit.bor(self.scroll_addr_0_4, self.scroll_addr_5_14), 0x0fff), 0x2000)
-    self.bg_pattern_lut_fetched =
-        PPU.TILE_LUT[
-        1 +
-            bit.band(
-                bit.rshift(
-                    self.nmt_ref[bit.band(bit.rshift(self.io_addr, 10), 3)][bit.band(self.io_addr, 0x03ff)],
-                    bit.bor(bit.band(self.scroll_addr_0_4, 0x2), (nthBitIsSetInt(self.scroll_addr_5_14, 6) * 0x4))
-                ),
-                3
-            )
-    ]
+    local a = self.nmt_ref[bit.band(bit.rshift(self.io_addr, 10), 3)][bit.band(self.io_addr, 0x03ff)]
+    local b = bit.bor(bit.band(self.scroll_addr_0_4, 0x2), (nthBitIsSetInt(self.scroll_addr_5_14, 6) * 0x4))
+    local idx = 1 + bit.band(bit.rshift(a, b), 3)
+    --[[
+    print "make_sure_invariants"
+    print(self.io_addr)
+    print(bit.band(bit.rshift(self.io_addr, 10), 3))
+    print(bit.band(self.io_addr, 0x03ff))
+    print(a)
+    print(b)
+    print(idx)
+    ]]
+    self.bg_pattern_lut_fetched = PPU.TILE_LUT[idx]
 end
 
 function PPU:io_latch_mask(data)
@@ -616,7 +625,7 @@ function PPU:poke_2006(_addr, data)
     if self.scroll_toggle then
         self.scroll_latch = bit.bor(bit.band(self.scroll_latch, 0x00ff), bit.lshift(bit.band(data, 0x3f), 8))
     else
-        self.scroll_latch = bit.band(bit.bor(self.scroll_latch, 0x7f00), data)
+        self.scroll_latch = bit.bor(bit.band(self.scroll_latch, 0x7f00), data)
         self.scroll_addr_0_4 = bit.band(self.scroll_latch, 0x001f)
         self.scroll_addr_5_14 = bit.band(self.scroll_latch, 0x7fe0)
         self:update_scroll_address_line()
@@ -642,21 +651,24 @@ function PPU:poke_2007(_addr, data)
     else
         addr = bit.band(addr, 0x3fff)
         if addr >= 0x2000 then
-            local nmt_bank = self.nmt_ref[bit.band(bit.rshift(addr, 10), 0x3) + 1]
-            local nmt_idx = bit.band(addr, 0x03ff) + 1
+            print "poke 2007 nmt ref"
+            local nmt_bank = self.nmt_ref[bit.band(bit.rshift(addr, 10), 0x3)]
+            local nmt_idx = bit.band(addr, 0x03ff)
             if nmt_bank[nmt_idx] ~= data then
                 nmt_bank[nmt_idx] = data
                 local t = self.lut_update[nmt_bank][nmt_idx]
                 local name_lut_update, attr_lut_update = t[1], t[2]
                 if name_lut_update then
                     for i = 1, #name_lut_update do
-                        --TODO:THIS
-                        self.name_lut[i] = bit.bor(bit.lshift(data, 4), b)
+                        local t = name_lut_update[i]
+                        self.name_lut[t[1]] = bit.bor(bit.lshift(data, 4), t[2])
                     end
                 --name_lut_update.each {|i, b| self.name_lut[i] = bit.bor(bit.lshift(data , 4) , b) }
                 end
                 if attr_lut_update then
                     for i = 1, #attr_lut_update do
+                        local a = attr_lut_update[i]
+                        a[2] = PPU.TILE_LUT[1 + bit.band(bit.rshift(data, a[3]), 3)]
                     end
                 --attr_lut_update.each {|a| a[1] = PPU.TILE_LUT[bit.band(bit.rshift(data , a[2]) , 3)] }
                 end
@@ -825,6 +837,7 @@ function PPU:fetch_attr()
     if not self.any_show then
         return
     end
+    print "fetch att"
     self.bg_pattern_lut = self.bg_pattern_lut_fetched
     -- raise unless self.bg_pattern_lut_fetched ==
     --   self.nmt_ref[self.io_addr >> 10 & 3][self.io_addr & 0x03ff] >>
@@ -896,8 +909,8 @@ function PPU:preload_tiles()
         return
     end
     local patt = self.bg_pattern_lut[self.bg_pattern]
-    for i = self.scroll_xfine, self.scroll_xfine + 7 do --8 do
-        self.bg_pixels[i] = patt[i - self.scroll_xfine + 1]
+    for i = 0, 7 do --8 do
+        self.bg_pixels[self.scroll_xfine + i] = patt[i + 1]
     end
 end
 
@@ -907,8 +920,8 @@ function PPU:load_tiles()
     end
     self.bg_pixels = rotate(self.bg_pixels, 8)
     local patt = self.bg_pattern_lut[self.bg_pattern]
-    for i = self.scroll_xfine, self.scroll_xfine + 7 do --8 do
-        self.bg_pixels[i] = patt[i - self.scroll_xfine + 1]
+    for i = 0, 7 do --8 do
+        self.bg_pixels[self.scroll_xfine + i] = patt[i + 1]
     end
 end
 
@@ -1078,6 +1091,13 @@ function PPU:render_pixel()
                     pixel = sprite[2]
                 end
             end
+        end
+        if pixel ~= 0 or true then
+            print "render px any show"
+            print(self.bg_pixels[self.hclk % 8])
+            print(self.bg_pixels[self.hclk % 8 + 1])
+            print(self.bg_pixels[(self.hclk % 8) + 1])
+            print(pixel)
         end
     else
         pixel = bit.band(self.scroll_addr_5_14, 0x3f00) == 0x3f00 and self.scroll_addr_0_4 or 0

@@ -1262,7 +1262,7 @@ function CPU:run_once()
         self.ppu:sync(self.clk)
     end
     asd = asd + 1
-    if asd > 100000 and false then
+    if asd > 10000000 then
         error "asd"
     end
 end
