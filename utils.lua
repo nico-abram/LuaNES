@@ -74,9 +74,11 @@ function UTILS.transpose(t)
     return tt
 end
 function UTILS.range(a, b, step)
+    step = step or 1
     local t = {}
-    for i = 0, b - a + 1, step or 1 do
-        t[i] = a + i
+    -- is floor right here?
+    for i = 0, (math.floor((b - a) / step) + 1) do
+        t[i] = a + i * (step or 1)
     end
     return t
 end
@@ -191,7 +193,6 @@ function UTILS.class(parent)
         local instance = {}
         setmetatable(instance, class._mt)
         if instance.initialize then
-            print "initC"
             instance:initialize(...)
         end
         return instance

@@ -1,14 +1,10 @@
 local UTILS = UTILS
 UTILS:import()
 
-local NES =
-    Nes or
-    {
-        -- DUMMY NES
-        RP2A03_CC = 12,
-        FOREVER_CLOCK = 0xffffffff
-    }
-CPU = {}
+CPU = {
+    RP2A03_CC = 12,
+    FOREVER_CLOCK = 0xffffffff
+}
 local CPU = CPU
 CPU._mt = {__index = CPU}
 
@@ -16,7 +12,7 @@ do
     CPU.CLK = {}
     local clocks = {1, 2, 3, 4, 5, 6, 7, 8}
     for i = 1, #clocks do
-        CPU.CLK[i] = clocks[i] * NES.RP2A03_CC
+        CPU.CLK[i] = clocks[i] * CPU.RP2A03_CC
     end
 end
 CPU.UNDEFINED = {}
@@ -63,7 +59,7 @@ function CPU:odd_clock()
 end
 
 function CPU:update()
-    self.apu.clock_dma(self.clk)
+    self.apu:clock_dma(self.clk)
     return self.clk
 end
 
@@ -77,7 +73,7 @@ function CPU:dmc_dma(addr)
 end
 
 function CPU:next_frame_clock()
-    return self.clk_next_frame
+    return self.clk_frame
 end
 
 function CPU:set_next_frame_clock(x)
@@ -123,7 +119,7 @@ function CPU:fetch(addr)
         self:printState()
         local reach = 2
         printf("Surroundings (range:%i):", reach)
-        for i = addr - range, addr + reach do
+        for i = addr - reach, addr + reach do
             local getter2 = self._fetch[i]
             if getter2 and (type(getter2) ~= "table" or getter2 ~= UNDEFINED) then
                 printf("%04X %04x", i, getter2(i))
@@ -148,8 +144,11 @@ end
 
 -- Read 16 bits (word) from addr
 function CPU:peek16(addr)
+    --print "peek16"
     local a = self:fetch(addr)
     local b = bit.lshift(self:fetch(addr + 1), 8)
+    --print(a)
+    --print(b)
     local x = a + b
     --[[
     print "peek16"
@@ -204,7 +203,6 @@ function CPU:reset()
 end
 
 function CPU:setpc()
-    self._pc = self.conf.pc or self:peek16(CPU.RESET_VECTOR)
     --[[
       print "RERERERE"
       printf("%04X",self:fetch(CPU.RESET_VECTOR-1))
@@ -235,11 +233,10 @@ function CPU:new(conf)
     cpu.clk_rate = CPU.ClockRates.Ntsc
     cpu.clk = 0 -- the current clock
     cpu.clk_frame = 0
-    cpu.clk_next_frame = 0 -- the next frame clock
     cpu.clk_target = 0 -- the goal clock for the current CPU#run
     cpu.clk_total = 0 -- the total elapsed clocks
-    cpu.clk_nmi = NES.FOREVER_CLOCK -- the next NMI clock (NES.FOREVER_CLOCK means "not scheduled")
-    cpu.clk_irq = NES.FOREVER_CLOCK -- the next IRQ clock
+    cpu.clk_nmi = CPU.FOREVER_CLOCK -- the next NMI clock (CPU.FOREVER_CLOCK means "not scheduled")
+    cpu.clk_irq = CPU.FOREVER_CLOCK -- the next IRQ clock
     cpu.irq_flags = 0
     cpu.jammed = false
     cpu:reset()
@@ -277,23 +274,26 @@ function CPU:sprite_dma(addr, sp_ram)
 end
 
 function CPU:boot()
-    self.clk = 0
+    self.clk = CLK[7] -- clocks it takes to boot
     --self._pc = 0xC000
-    self:setpc()
+    --print "boot"
+    --printf("%04X", self._pc)
+    self._pc = self.conf.pc or self:peek16(CPU.RESET_VECTOR)
+    --printf("%04X", self._pc)
 end
 
 function CPU:vsync()
     if self.ppu_sync then
-        self.ppu.sync(self.clk)
+        (self.ppu):sync(self.clk)
     end
 
     self.clk = self.clk - self.clk_frame
     self.clk_total = self.clk_target + self.clk_frame
 
-    if self.clk_nmi ~= NES.FOREVER_CLOCK then
+    if self.clk_nmi ~= CPU.FOREVER_CLOCK then
         self.clk_nmi = self.clk_nmi - self.clk_frame
     end
-    if self.clk_irq ~= NES.FOREVER_CLOCK then
+    if self.clk_irq ~= CPU.FOREVER_CLOCK then
         self.clk_irq = self.clk_irq - self.clk_frame
     end
     if self.clk_irq < 0 then
@@ -309,7 +309,7 @@ function CPU:clear_irq(line)
     self.irq_flags =
         bit.band(bit.bxor(self.irq_flags, bit.bxor(line, bit.bor(bit.bor(CPU.IRQ_EXT, CPU.IRQ_FRAME), CPU.IRQ_DMC))))
     if self.irq_flags == 0 then
-        self.clk_irq = NES.FOREVER_CLOCK
+        self.clk_irq = CPU.FOREVER_CLOCK
     end
     return old_irq_flags
 end
@@ -324,13 +324,13 @@ end
 
 function CPU:do_irq(line, clk)
     self.irq_flags = bit.bor(self.irq_flags, line)
-    if self.clk_irq == NES.FOREVER_CLOCK and self._p_i == 0 then
+    if self.clk_irq == CPU.FOREVER_CLOCK and self._p_i == 0 then
         self.clk_irq = self:next_interrupt_clock(clk)
     end
 end
 
 function CPU:do_nmi(clk)
-    if self.clk_nmi == NES.FOREVER_CLOCK then
+    if self.clk_nmi == CPU.FOREVER_CLOCK then
         self.clk_nmi = self:next_interrupt_clock(clk)
     end
 end
@@ -352,9 +352,9 @@ function CPU:fetch_irq_isr_vector()
         --print("30000")
         self:fetch(0x3000)
     end
-    if self.clk_nmi ~= NES.FOREVER_CLOCK then
+    if self.clk_nmi ~= CPU.FOREVER_CLOCK then
         if self.clk_nmi + CLK[2] <= self.clk then
-            self.clk_nmi = NES.FOREVER_CLOCK
+            self.clk_nmi = CPU.FOREVER_CLOCK
             --print("NMI")
             return CPU.NMI_VECTOR
         end
@@ -698,7 +698,7 @@ function CPU:_rti()
     self._pc = self:pull16()
     self:flags_unpack(packed)
     if self.irq_flags == 0 or self._p_i ~= 0 then
-        self.clk_irq = NES.FOREVER_CLOCK
+        self.clk_irq = CPU.FOREVER_CLOCK
     else
         self.clk_target = 0
         self.clk_irq = 0
@@ -888,7 +888,7 @@ function CPU:_sei()
     self.clk = self.clk + CLK[2]
     if self._p_i == 0 then
         self._p_i = 0x04
-        self.clk_irq = NES.FOREVER_CLOCK
+        self.clk_irq = CPU.FOREVER_CLOCK
         if self.irq_flags ~= 0 then
             self:do_isr(CPU.IRQ_VECTOR)
         end
@@ -939,7 +939,7 @@ function CPU:_plp()
                 self.clk_target = clk
             end
         elseif i < self._p_i then
-            self.clk_irq = NES.FOREVER_CLOCK
+            self.clk_irq = CPU.FOREVER_CLOCK
             self:do_isr(CPU.IRQ_VECTOR)
         end
     end
@@ -1112,7 +1112,7 @@ function CPU:_brk()
     data = bit.bor(self:flags_pack(), 0x10)
     self:push8(data)
     self._p_i = 0x04
-    self.clk_irq = NES.FOREVER_CLOCK
+    self.clk_irq = CPU.FOREVER_CLOCK
     self.clk = self.clk + CLK[7]
     local addr = self:fetch_irq_isr_vector() -- for inlining peek16
     self._pc = self:peek16(addr)
@@ -1124,22 +1124,26 @@ function CPU:_jam()
     if not self.jammed then
         self.jammed = true
         -- interrupt reset
-        self.clk_nmi = NES.FOREVER_CLOCK
-        self.clk_irq = NES.FOREVER_CLOCK
+        self.clk_nmi = CPU.FOREVER_CLOCK
+        self.clk_irq = CPU.FOREVER_CLOCK
         self.irq_flags = 0
     end
 end
 
 --------------------------------------------------------------------------------------------------------------------
 -- default core
-function CPU:printState()
+function CPU:printState(doFetch)
+    local ppuclk = 0
+    if self.ppu then
+        ppuclk = self.ppu.hclk
+    end
     print(
         string.format(
-            "PC:%04X OP:%02X %02X %02X %s %02X %04X \t A:%02X X:%02X Y:%02X P:%02X SP:%02X CYC:%3d",
+            "PC:%04X OP:%02X %02X %02X %s %04X %02X \t A:%02X X:%02X Y:%02X P:%02X SP:%02X CYC:%3d %s",
             self._pc,
             self.opcode or 0,
-            self:fetch(self._pc + 1),
-            self:fetch(self._pc + 2),
+            doFetch and self:fetch(self._pc + 1) or -1,
+            doFetch and self:fetch(self._pc + 2) or -1,
             table.concat(CPU.DISPATCH[self.opcode] or {}, " "),
             self.data,
             self.addr,
@@ -1148,9 +1152,34 @@ function CPU:printState()
             self._y,
             self:flags_pack(),
             self._sp,
-            self.clk / 4 % 341
+            self.clk / 4 % 341,
+            tostring(ppuclk),
+            self.clk
         )
     )
+    --[[
+    print(
+        string.format(
+            "PC:%04X OP:%02X %02X %02X %s %04X %02X \t A:%02X X:%02X Y:%02X P:%02X SP:%02X CYC:%3d %d %d %d",
+            self._pc,
+            self.opcode or 0,
+            doFetch and self:fetch(self._pc + 1) or -1,
+            doFetch and self:fetch(self._pc + 2) or -1,
+            table.concat(CPU.DISPATCH[self.opcode] or {}, " "),
+            self.data,
+            self.addr,
+            self._a,
+            self._x,
+            self._y,
+            self:flags_pack(),
+            self._sp,
+            self.clk / 4 % 341,
+            self.clk,
+            self.clk_target,
+            self.clk_frame
+        )
+    )
+    --]]
 end
 function CPU:r_op(instr, mode)
     self[mode](self, true, false)
@@ -1178,16 +1207,16 @@ end
 
 function CPU:no_op(_instr, ops, ticks)
     self._pc = self._pc + ops
-    self.clk = self.clk + ticks * NES.RP2A03_CC
+    self.clk = self.clk + ticks * CPU.RP2A03_CC
 end
 
 function CPU:do_clock()
-    local clock = self.apu:do_clock()
+    local ticks = self.apu:do_clock()
+    local clock = math.min(ticks, self.clk_frame)
+    --print "do clock"
+    --print(clock)
     --printf("%04X", clock)
 
-    if clock > self.clk_frame then
-        clock = self.clk_frame
-    end
     --[[
     printf("%04X", clock)
     printf("%04X", self.clk_nmi)
@@ -1195,22 +1224,17 @@ function CPU:do_clock()
     print(self.clk < self.clk_nmi)
     print(self.clk < self.clk_irq)
     ]]
-
     if self.clk < self.clk_nmi then
-        if clock > self.clk_nmi then
-            clock = self.clk_nmi
-        end
+        clock = math.min(clock, self.clk_nmi)
         if self.clk < self.clk_irq then
-            if clock > self.clk_irq then
-                clock = self.clk_irq
-            end
+            clock = math.min(clock, self.clk_irq)
         else
-            self.clk_irq = NES.FOREVER_CLOCK
+            self.clk_irq = CPU.FOREVER_CLOCK
             self:do_isr(CPU.IRQ_VECTOR)
         end
     else
-        self.clk_nmi = NES.FOREVER_CLOCK
-        self.clk_irq = NES.FOREVER_CLOCK
+        self.clk_nmi = CPU.FOREVER_CLOCK
+        self.clk_irq = CPU.FOREVER_CLOCK
         self:do_isr(CPU.NMI_VECTOR)
     end
     self.clk_target = clock
@@ -1219,7 +1243,7 @@ local asd = 0
 function CPU:run_once()
     self.opcode = self:fetch(self._pc)
     --if self.conf.loglevel >= 3 then
-    self:printState()
+    self:printState(true)
     --[[
             self.conf.debug(string.format("PC:%04X A:%02X X:%02X Y:%02X P:%02X SP:%02X CYC:%3d : OPCODE:%02X (%d, %d)" ,
               self._pc, self._a, self._x, self._y, self:flags_pack(), self._sp, self.clk / 4 % 341, self.opcode, self.cl
@@ -1235,32 +1259,34 @@ function CPU:run_once()
     local f = operationData[1]
     self[f](self, unpack(operationData, 2))
     if self.ppu_sync then
-        self.ppu.sync(self.clk)
+        self.ppu:sync(self.clk)
     end
     asd = asd + 1
-    if asd > 1000 then
+    if asd > 100000 and false then
         error "asd"
     end
 end
 function CPU:run()
+    --print "run"
+    --print(0xfffc)
+    --print(self._pc)
     self:do_clock()
     repeat
         repeat
-            self:run_once()
-            --[[
+            self:run_once() --[[
             printf("STEP1")
             printf("%04X", self.clk)
             printf("%04X", self.clk_target)
             printf("%04X", self.clk_frame)
             ]]
-        until self.clk < self.clk_target
-            --[[
-        self:do_clock()
+        until not (self.clk < self.clk_target)
+        --[[
         printf("STEP2")
         printf("%04X", self.clk_target)
         ]]
-    until self.clk < self.clk_frame
-            --[[
+        self:do_clock()
+    until not (self.clk < self.clk_frame)
+    --[[
     printf("STEP3")
     printf("%04X", self.clk_frame)
     ]]
@@ -1438,5 +1464,4 @@ for k, v in pairs(CPU.DISPATCH) do
   CPU.DISPATCHER[k] = cacheF
 end
 ]]
-
 return CPU

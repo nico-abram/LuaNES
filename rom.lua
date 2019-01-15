@@ -88,7 +88,7 @@ function ROM:initialize(conf, cpu, ppu, basename, bytes, str)
     self:init()
 
     self.ppu.nametables = self.mirroring
-    self.ppu.set_chr_mem(self.chr_ref, self.chr_ram)
+    self.ppu:set_chr_mem(self.chr_ref, self.chr_ram)
     --[[
     UTILS.print(#(self.chr_ref))
     UTILS.print(#(self.chr_banks))
@@ -103,23 +103,7 @@ function ROM:init()
 end
 
 function ROM:reset()
-    local n = #(self.prg_banks)
-    --[[
-    print("BANKS")
-    print(n)
-    UTILS.printf("%04x",self.prg_ref[0xfffd])
-    UTILS.printf("%04x",self.prg_ref[0xfffd-1])
-    UTILS.printf("%04x",self.prg_ref[0xfffd-2])
-    UTILS.printf("%04x",self.prg_ref[0xfffd-3])
-    UTILS.printf("%04x",self.prg_ref[0xfffd])
-    UTILS.printf("%04x",self.prg_ref[0xfffd-0x4000])
-    UTILS.printf("%04x",self.prg_ref[0xfffd-0x8000])
-    ]]
-    self.cpu:add_mappings(
-        range(0x8000, math.ceil(0x8000 + (0xffff - 0x8000) / n)),
-        tGetter(self.prg_ref),
-        CPU.UNDEFINED
-    )
+    self.cpu:add_mappings(range(0x8000, 0xffff), tGetter(self.prg_ref), CPU.UNDEFINED)
 end
 
 function ROM:inspect()
@@ -188,6 +172,8 @@ function ROM.load(conf, cpu, ppu)
     end
     local mapper = bit.bor(bit.rshift(blob[7], 4), bit.band(blob[8], 0xf0))
 
+    --print "amper"
+    --print(mapper)
     local klass = ROM.MAPPER_DB[mapper]
     if not klass then
         error(string.format("Unsupported mapper type 0x%02x", mapper))

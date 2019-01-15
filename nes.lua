@@ -1,5 +1,8 @@
 require "libs/serpent"
 require "utils"
+NES = {}
+local NES = NES
+NES._mt = {__index = NES}
 require "cpu"
 require "ppu"
 require "apu"
@@ -8,20 +11,15 @@ require "palette"
 
 UTILS:import()
 
-NES = {}
-local NES = NES
-NES._mt = {__index = NES}
-
 function NES:reset()
     self.audio, self.video, self.input = {spec = {}}, {palette = {}}, {}
 
     local cpu = self.cpu
     cpu:reset()
     cpu.apu:reset(self.audio.spec)
-    cpu.ppu:reset(self.video.palette)
+    cpu.ppu:reset()
     self.rom:reset()
     self.pads:reset()
-    cpu:setpc()
     cpu:boot()
     self.rom:load_battery()
 end

@@ -21,7 +21,7 @@ APU.FRAME_CLOCKS =
   map(
   {29830, 1, 1, 29828},
   function(n)
-    return NES.RP2A03_CC * n
+    return CPU.RP2A03_CC * n
   end
 )
 APU.OSCILLATOR_CLOCKS =
@@ -34,7 +34,7 @@ APU.OSCILLATOR_CLOCKS =
     return map(
       a,
       function(n)
-        return NES.RP2A03_CC * n
+        return CPU.RP2A03_CC * n
       end
     )
   end
@@ -165,7 +165,7 @@ function APU:reset(mapping)
   self.dmc:reset()
   self.mixer:reset()
   self.buffer = {} -- ..clear -> this. Is it enough? (Or do we empty existing table)
-  self.oscillator_clocks = APU.OSCILLATOR_CLOCKS[0]
+  self.oscillator_clocks = APU.OSCILLATOR_CLOCKS[1]
 end
 
 --##########################################################################
@@ -174,10 +174,11 @@ end
 function APU:do_clock()
   local curClk = self.cpu:current_clock()
   self:clock_dma(curClk)
+  curClk = self.cpu:current_clock()
   if self.frame_irq_clock <= curClk then
     self:clock_frame_irq(curClk)
   end
-  return self.dmc_clock < self.frame_irq_clock and self.dmc_clock or self.frame_irq_clock
+  return math.min(self.dmc_clock, self.frame_irq_clock)
 end
 
 function APU:clock_dma(clk)
@@ -187,7 +188,7 @@ function APU:clock_dma(clk)
 end
 
 function APU:update(target)
-  target = target or self.cpu.update
+  target = target or self.cpu:update()
   target = target * self.fixed_clock
   self:proceed(target)
   if self.frame_counter < target then
@@ -245,12 +246,12 @@ function APU:clock_dmc(target)
     end
     self.dmc_clock = self.dmc_clock + self.dmc.freq
     self.dmc:clock_dma() -- TODO: IS THIS RIGHT?
-  until not self.dmc_clock <= target
+  until not (self.dmc_clock <= target)
 end
 function APU:clock_frame_counter()
-  self:clock_oscillators(self.frame_divider[0] == 1)
+  self:clock_oscillators(nthBitIsSetInt(self.frame_divider, 0) == 1)
   self.frame_divider = bit.band((self.frame_divider + 1), 3)
-  self.frame_counter = self.frame_counter + self.oscillator_clocks[self.frame_divider] * self.fixed_clock
+  self.frame_counter = self.frame_counter + self.oscillator_clocks[self.frame_divider + 1] * self.fixed_clock
 end
 
 function APU:clock_frame_irq(target)
@@ -258,7 +259,7 @@ function APU:clock_frame_irq(target)
   repeat
     self.frame_irq_clock = self.frame_irq_clock + APU.FRAME_CLOCKS[2 + self.frame_irq_repeat % 3]
     self.frame_irq_repeat = self.frame_irq_repeat + 1
-  until not self.frame_irq_clock <= target
+  until not (self.frame_irq_clock <= target)
 end
 
 function APU:flush_sound()
@@ -296,17 +297,17 @@ end
 -- Control
 function APU:poke_4015(_addr, data)
   self:update()
-  self.pulse_0:enable(data[0] == 1)
-  self.pulse_1:enable(data[1] == 1)
-  self.triangle:enable(data[2] == 1)
-  self.noise:enable(data[3] == 1)
-  self.dmc:enable(data[4] == 1)
+  self.pulse_0:enable(nthBitIsSetInt(data, 0) == 1)
+  self.pulse_1:enable(nthBitIsSetInt(data, 1) == 1)
+  self.triangle:enable(nthBitIsSetInt(data, 2) == 1)
+  self.noise:enable(nthBitIsSetInt(data, 3) == 1)
+  self.dmc:enable(nthBitIsSetInt(data, 4) == 1)
 end
 
 -- Status
 --function
 function APU:peek_4015(_addr)
-  elapsed = self.cpu.update
+  local elapsed = self.cpu:update()
   if self.frame_irq_clock <= elapsed then
     self:clock_frame_irq(elapsed)
   end
@@ -334,10 +335,10 @@ function APU:poke_4017(_addr, data)
     clock_frame_irq(n)
   end
   n = n + CPU.CLK[1]
-  self.oscillator_clocks = APU.OSCILLATOR_CLOCKS[data[7]]
-  self.frame_counter = (n + self.oscillator_clocks[0]) * self.fixed_clock
+  self.oscillator_clocks = APU.OSCILLATOR_CLOCKS[data[7] + 1]
+  self.frame_counter = (n + self.oscillator_clocks[1]) * self.fixed_clock
   self.frame_divider = 0
-  self.frame_irq_clock = (bit.band(data, 0xc0) ~= 0) and FOREVER_CLOCK or (n + APU.FRAME_CLOCKS[1])
+  self.frame_irq_clock = (bit.band(data, 0xc0) ~= 0) and CPU.FOREVER_CLOCK or (n + APU.FRAME_CLOCKS[1])
   self.frame_irq_repeat = 0
   if data[6] ~= 0 then
     self.cpu.clear_irq(CPU.IRQ_FRAME)
@@ -563,20 +564,17 @@ function Oscillator:poke_3(_addr, data)
     self.envelope:reset_clock()
   end
   if self.length_counter then
-    self.length_counter.write(bit.rhisft(data, 3), delta)
+    self.length_counter:write(bit.rhisft(data, 3), delta)
   end
   self.is_active = self:active()
 end
 
 function Oscillator:enable(enabled)
-  self.length_counter.enable(enabled)
+  self.length_counter:enable(enabled)
   self.is_active = self:active()
 end
 
 function Oscillator:update_settings(r, f)
-  print(self.timer)
-  print(self.fixed)
-  print(self.freq)
   self.freq = self.freq / self.fixed * f
   self.timer = self.timer / self.fixed * f
   self.rate, self.fixed = r, f
@@ -617,8 +615,6 @@ end
 
 function Pulse:reset()
   self._parent.reset(self)
-  print(self.fixed)
-  print(self.freq)
   self.freq = self.fixed * 2
   self.valid_freq = false
   self.step = 0
@@ -670,7 +666,7 @@ function Pulse:poke_3(_addr, _data)
 end
 
 function Pulse:clock_sweep(complement)
-  if not self.envelope.looping and self.length_counter.clock then
+  if not self.envelope.looping and self.length_counter:clock() then
     self.is_active = false
   end
   if self.sweep_rate ~= 0 then
@@ -711,7 +707,7 @@ function Pulse:sample()
         self.step = bit.band((self.step + 1), 7)
         sum = sum + bit.rshift(v, self.form[self.step])
         self.timer = self.timer + self.freq
-      until not self.timer < 0
+      until not (self.timer < 0)
       self.amp = (sum * self.envelope.output + self.rate / 2) / self.rate
     else
       self.amp = bit.rshift(self.envelope.output, self.form[self.step])
@@ -786,7 +782,7 @@ function Triangle:clock_linear_counter()
 end
 
 function Triangle:clock_length_counter()
-  if self.linear_counter_start and self.length_counter.clock then
+  if self.linear_counter_start and self.length_counter:clock() then
     self.is_active = false
   end
 end
@@ -805,7 +801,7 @@ function Triangle:sample()
         self.step = bit.band((self.step + 1), 0x1f)
         sum = sum + v * WAVE_FORM[self.step]
         self.timer = self.timer + self.freq
-      until not self.timer < 0
+      until not (self.timer < 0)
       self.amp = (sum * APU.CHANNEL_OUTPUT_MUL + self.rate / 2) / self.rate * 3
     else
       self.amp = Triangle.WAVE_FORM[self.step] * APU.CHANNEL_OUTPUT_MUL * 3
@@ -845,7 +841,6 @@ end
 
 function Noise:reset()
   self._parent.reset(self)
-  print(self.fixed)
   self.freq = Noise.LUT[1] * self.fixed
   self.bits = 0x4000
   self.shifter = Noise.NEXT_BITS_1
@@ -858,7 +853,7 @@ function Noise:poke_2(_addr, data)
 end
 
 function Noise:clock_length_counter()
-  if not self.envelope.looping and self.length_counter.clock then
+  if not self.envelope.looping and self.length_counter:clock() then
     self.is_active = false
   end
 end
@@ -881,7 +876,7 @@ function Noise:sample()
         sum = sum + v
       end
       self.timer = self.timer + self.freq
-    until not self.timer < 0
+    until not (self.timer < 0)
     return (sum * self.envelope.output + self.rate / 2) / self.rate * 2
   else
     while self.timer < 0 do
@@ -898,7 +893,7 @@ DMC.LUT =
   map(
   {428, 380, 340, 320, 286, 254, 226, 214, 190, 160, 142, 128, 106, 84, 72, 54},
   function(n)
-    return n * NES.RP2A03_CC
+    return n * CPU.RP2A03_CC
   end
 )
 
@@ -973,8 +968,8 @@ function DMC:update()
 end
 
 function DMC:poke_0(_addr, data)
-  self.loop = data[6] ~= 0
-  self.irq_enable = data[7] ~= 0
+  self.loop = nthBitIsSetInt(data, 6) ~= 0
+  self.irq_enable = nthBitIsSetInt(data, 7) ~= 0
   self.freq = DMC.LUT[bit.band(data, 0x0f) + 1]
   if not self.irq_enable then
     self.cpu:clear_irq(CPU.IRQ_DMC)

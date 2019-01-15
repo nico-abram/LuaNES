@@ -4,7 +4,8 @@ local PALETTE = PALETTE
 UTILS:import()
 
 function PALETTE:defacto_palette()
-    return flat_map(
+    local p =
+        flat_map(
         {
             {1.00, 1.00, 1.00}, -- default
             {1.00, 0.80, 0.81}, -- emphasize R
@@ -90,11 +91,13 @@ function PALETTE:defacto_palette()
                     local r = math.min(math.floor(bit.band(bit.rshift(rgb, 16), 0xff) * rf), 0xff)
                     local g = math.min(math.floor(bit.band(bit.rshift(rgb, 8), 0xff) * gf), 0xff)
                     local b = math.min(math.floor(bit.band(bit.rshift(rgb, 0), 0xff) * bf), 0xff)
+                    --return bit.bor(0x000000, bit.lshift(r, 16), bit.lshift(g, 8), b)
                     return {r, g, b}
                 end
             )
         end
     )
+    return p
 end
 --[[
     -- Nestopia generates a palette systematically (cool!), but it is not compatible with nes-tests-rom
