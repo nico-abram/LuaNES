@@ -1,3 +1,5 @@
+local complex = require "libs/complex"
+
 PALETTE = {}
 local PALETTE = PALETTE
 
@@ -91,7 +93,7 @@ function PALETTE:defacto_palette()
                     local r = math.min(math.floor(bit.band(bit.rshift(rgb, 16), 0xff) * rf), 0xff)
                     local g = math.min(math.floor(bit.band(bit.rshift(rgb, 8), 0xff) * gf), 0xff)
                     local b = math.min(math.floor(bit.band(bit.rshift(rgb, 0), 0xff) * bf), 0xff)
-                    --return bit.bor(0x000000, bit.lshift(r, 16), bit.lshift(g, 8), b)
+                    --return bit.bor(0x00000000, bit.lshift(r, 16), bit.lshift(g, 8), b)
                     return {r, g, b}
                 end
             )
@@ -99,39 +101,52 @@ function PALETTE:defacto_palette()
     )
     return p
 end
---[[
-    -- Nestopia generates a palette systematically (cool!), but it is not compatible with nes-tests-rom
-    function PALETTE:nestopia_palette()
-      return map(range(0,511), function(n)
-        local tint, level, color = bit.band(bit.rshift(n , 6), 7), bit.band(bit.rshift(n , 4), 3), bit.band(n, 0x0f)
-        local t= ({{-0.12, 0.40}, {0.00, 0.68}, {0.31, 1.00}, {0.72, 1.00}})[level]
-        local level0, level1 = t[1], t[2]
-        if color == 0x00 then level0 = level1 end
-        if color == 0x0d then level1 = level0  end
-        if color >= 0x0e then level0 = 0
-            level1 = 0 end
-        local y = (level1 + level0) * 0.5
-        local s = (level1 - level0) * 0.5
-        local iq = Complex.polar(s, math.pi / 6 * (color - 3))
-        if tint ~= 0 and color <= 0x0d then
-          if tint == 7 then
-            y = (y * 0.79399 - 0.0782838) * 1.13
-          else
-            level1 = (level1 * (1 - 0.79399) + 0.0782838) * 0.5
-            y =y- level1 * 0.5
-            if tint==3 or tint==5 or tint==6 then 
-                level1 =level1* 0.6 y
-                 =y-level1   
+--[
+-- Nestopia generates a palette systematically (cool!), but it is not compatible with nes-tests-rom
+function PALETTE:nestopia_palette()
+    return map(
+        range(0, 511),
+        function(n)
+            local tint, level, color = bit.band(bit.rshift(n, 6), 7), bit.band(bit.rshift(n, 4), 3), bit.band(n, 0x0f)
+            local t = ({{-0.12, 0.40}, {0.00, 0.68}, {0.31, 1.00}, {0.72, 1.00}})[level + 1]
+            local level0, level1 = t[1], t[2]
+            if color == 0x00 then
+                level0 = level1
+            end
+            if color == 0x0d then
+                level1 = level0
+            end
+            if color >= 0x0e then
+                level0 = 0
+                level1 = 0
+            end
+            local y = (level1 + level0) * 0.5
+            local s = (level1 - level0) * 0.5
+            local iq = complex.convpolar(s, math.pi / 6 * (color - 3))
+            if tint ~= 0 and color <= 0x0d then
+                if tint == 7 then
+                    y = (y * 0.79399 - 0.0782838) * 1.13
+                else
+                    level1 = (level1 * (1 - 0.79399) + 0.0782838) * 0.5
+                    y = y - level1 * 0.5
+                    if tint == 3 or tint == 5 or tint == 6 then
+                        level1 = level1 * 0.6
+                        y = y - level1
+                    end
+                    iq = iq + complex.convpolar(level1, math.pi / 12 * (({0, 6, 10, 8, 2, 4, 0, 0})[tint + 1]) * 2 - 7)
                 end
-            iq =iq+ Complex.polar(level1, math.pi / 12 * ([0, 6, 10, 8, 2, 4, 0, 0][tint] * 2 - 7))
-          end
+            end
+            return map(
+                {{105, 0.570}, {251, 0.351}, {15, 1.015}},
+                function(pair)
+                    local angle, gain = pair[1], pair[2]
+
+                    local clr =
+                        y + ((complex.convpolar(gain * 2, (angle - 33) * math.pi / 180) * complex.conjugate(iq))[1])
+                    return math.min(math.max(0, math.floor(clr * 255)), 255)
+                end
+            )
         end
-        return map({{105, 0.570}, {251, 0.351}, {15, 1.015}}function(pair)
-            local angle, gain = pair[1], pair[2]
-            
-          local clr = y + (Complex.polar(gain * 2, (angle - 33) * math.pi/ 180) * iq.conjugate).real
-            return {0, math.floor(clr * 255), 255}.sort[2]
-        end
-      end)
-    end
-    ]]
+    )
+end
+--]]
