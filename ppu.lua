@@ -866,9 +866,7 @@ function PPU:fetch_bg_pattern_1()
     if not self.any_show then
         return
     end
-    if not self.bg_pattern then
-        self.bg_pattern = self.chr_mem[1 + bit.band(self.io_addr, 0x1fff)] * 0x100
-    end
+    self.bg_pattern = bit.bor(self.bg_pattern, self.chr_mem[1 + bit.band(self.io_addr, 0x1fff)] * 0x100)
 end
 
 function PPU:scroll_clock_x()
