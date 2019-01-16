@@ -55,11 +55,18 @@ function CPU:steal_clocks(clk)
 end
 
 function CPU:odd_clock()
+    --print "odd_clock"
+    --print(self.clk_total)
+    --print(self.clk)
+    --print(CLK[2])
     return ((self.clk_total + self.clk) % CLK[2]) ~= 0
 end
 
 function CPU:update()
+    --print "cpu update"
+    --print(self.clk)
     self.apu:clock_dma(self.clk)
+    --print(self.clk)
     return self.clk
 end
 
@@ -265,11 +272,12 @@ function CPU:dmc_dma(addr)
 end
 
 function CPU:sprite_dma(addr, sp_ram)
-    for i = 0, 255 do
-        sp_ram[i] = self.ram[addr + i]
+    for i = 1, 256 do
+        sp_ram[i] = self.ram[addr + i - 1]
     end
     for i = 0, 63 do
-        sp_ram[i * 4 + 2] = bit.band(sp_ram[i * 4 + 2], 0xe3)
+        local j = i * 4 + 3
+        sp_ram[j] = bit.band(sp_ram[j], 0xe3)
     end
 end
 
@@ -288,7 +296,7 @@ function CPU:vsync()
     end
 
     self.clk = self.clk - self.clk_frame
-    self.clk_total = self.clk_target + self.clk_frame
+    self.clk_total = self.clk_total + self.clk_frame
 
     if self.clk_nmi ~= CPU.FOREVER_CLOCK then
         self.clk_nmi = self.clk_nmi - self.clk_frame
@@ -424,8 +432,11 @@ end
 
 ------ storers ------
 function CPU:store_mem()
+    --print(self.clk)
     self:store(self.addr, self.data)
+    --print(self.clk)
     self.clk = self.clk + CLK[1]
+    --print(self.clk)
 end
 
 function CPU:store_zpg()
@@ -513,7 +524,9 @@ end
 function CPU:abs(read, write)
     self.addr = self:peek16(self._pc)
     self._pc = self._pc + 2
+    --print(self.clk)
     self.clk = self.clk + CLK[3]
+    --print(self.clk)
     return self:read_write(read, write)
 end
 
@@ -590,10 +603,14 @@ function CPU:read_write(read, write)
     if read then
         --print(string.format("%04X",self.addr))
         self.data = self:fetch(self.addr)
+        --print(self.clk)
         self.clk = self.clk + CLK[1]
+        --print(self.clk)
         if write then
             self:store(self.addr, self.data)
+            --print(self.clk)
             self.clk = self.clk + CLK[1]
+        --print(self.clk)
         end
     end
 end
@@ -1133,6 +1150,7 @@ end
 --------------------------------------------------------------------------------------------------------------------
 -- default core
 function CPU:printState(doFetch)
+    --[
     local ppuclk = 0
     if self.ppu then
         ppuclk = self.ppu.hclk
@@ -1157,6 +1175,7 @@ function CPU:printState(doFetch)
             self.clk
         )
     )
+    --]]
     --[[
     print(
         string.format(
@@ -1224,19 +1243,23 @@ function CPU:do_clock()
     print(self.clk < self.clk_nmi)
     print(self.clk < self.clk_irq)
     ]]
+    --print "cpu do clock"
     if self.clk < self.clk_nmi then
         clock = math.min(clock, self.clk_nmi)
         if self.clk < self.clk_irq then
             clock = math.min(clock, self.clk_irq)
         else
+            --print "cpu do isr irq"
             self.clk_irq = CPU.FOREVER_CLOCK
             self:do_isr(CPU.IRQ_VECTOR)
         end
     else
+        --print "cpu do isr nmi"
         self.clk_nmi = CPU.FOREVER_CLOCK
         self.clk_irq = CPU.FOREVER_CLOCK
         self:do_isr(CPU.NMI_VECTOR)
     end
+    --print(self.clk)
     self.clk_target = clock
 end
 local asd = 0
@@ -1258,11 +1281,15 @@ function CPU:run_once()
     local operationData = CPU.DISPATCH[self.opcode]
     local f = operationData[1]
     self[f](self, unpack(operationData, 2))
+    --print(self.clk)
     if self.ppu_sync then
         self.ppu:sync(self.clk)
     end
+    --print(self.clk)
     asd = asd + 1
-    if asd > 10000000 then
+    if asd > 3500000 then
+        asdasdsssasd:flush()
+        asdasdsssasd:close()
         error "asd"
     end
 end
