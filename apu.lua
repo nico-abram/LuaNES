@@ -449,9 +449,9 @@ end
 
 function Envelope:write(data)
   self.volume_base = bit.band(data, 0x0f)
-  self.constant = data[4] == 1
-  self.looping = data[5] == 1
-  return update_output()
+  self.constant = nthBitIsSetInt(data, 4) == 1
+  self.looping = nthBitIsSetInt(data, 5) == 1
+  return self:update_output()
 end
 
 function Envelope:update_output()
@@ -564,7 +564,7 @@ function Oscillator:poke_3(_addr, data)
     self.envelope:reset_clock()
   end
   if self.length_counter then
-    self.length_counter:write(bit.rhisft(data, 3), delta)
+    self.length_counter:write(bit.rshift(data, 3), delta)
   end
   self.is_active = self:active()
 end
@@ -732,7 +732,7 @@ Triangle.MIN_FREQ = 2 + 1
 Triangle.WAVE_FORM = concat(range(0, 15), range(15, 0))
 
 function Triangle:initialize(_apu)
-  self._parent.initialize(self)
+  self._parent.initialize(self, _apu)
   self.wave_length = 0
   self.length_counter = LengthCounter:new()
 end
@@ -759,7 +759,7 @@ function Triangle:poke_0(_addr, data)
   self._parent.poke_0(self)
   self.apu:update()
   self.linear_counter_load = bit.band(data, 0x7f)
-  self.linear_counter_start = data[7] == 0
+  self.linear_counter_start = nthBitIsSetInt(data, 7) == 0
 end
 
 function Triangle:poke_3(_addr, _data)
@@ -834,7 +834,7 @@ Noise.NEXT_BITS_1, Noise.NEXT_BITS_6 =
 )
 
 function Noise:initialize(_apu)
-  self._parent.initialize(self)
+  self._parent.initialize(self, _apu)
   self.envelope = Envelope:new()
   self.length_counter = LengthCounter:new()
 end
