@@ -27,7 +27,11 @@ function NES:run_once()
     self.cpu.ppu:setup_frame()
     self.cpu:run()
     self.cpu.ppu:vsync()
+    --print "ppu vsync"
+    --print(self.cpu.clk)
     self.cpu.apu:vsync()
+    --print "apu vsync"
+    --print(self.cpu.clk)
     self.cpu:vsync()
     self.rom:vsync()
 

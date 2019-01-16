@@ -42,13 +42,49 @@ function UTILS.fill(t, v, n, step, offs)
     end
     return t
 end
-function UTILS.rotate(t, r)
+
+-- In-place
+function UTILS.rotate( array, shift ) -- Works for array with consecutive entries
+    shift = shift or 1 -- make second arg optional, defaults to 1
+    
+    local start = array[0] and 0 or 1
+    local size = #array
+
+    if shift > 0 then
+	    for i = 1, math.abs(shift) do
+	        table.insert( array, 1, table.remove( array, size ) )
+	    end
+	else
+		for i = 1, math.abs(shift) do
+	        table.insert( array, size, table.remove( array, 1 ) )
+	    end	
+	end
+    return array
+end
+function UTILS.rotateNew(t, r)
     local rotated = {}
     local size = #t
-    for i = t[0] and 0 or 1, size do
-        local idx = i + r
-        idx = idx > size and idx - size or (idx < 1 and idx + size or idx)
-        rotated[i] = t[idx]
+    local start = t[0] and 0 or 1
+    if r >= 0 then
+        for i = start, size do
+            local idx = i + r
+            if idx > size then
+                idx =  idx - size 
+            elseif (idx < start) then
+                idx=  idx + size
+            end
+            rotated[i] = t[idx]
+        end
+    else
+        for i = 1, size do
+            local idx = size - i + r
+            if idx > size then
+                idx =  idx - size 
+            elseif (idx < start) then
+                idx=  idx + size
+            end
+            rotated[i] = t[idx]
+        end
     end
     return rotated
 end
@@ -77,7 +113,7 @@ function UTILS.range(a, b, step)
     step = step or 1
     local t = {}
     -- is floor right here?
-    for i = 0, (math.floor((b - a) / step) + 1) do
+    for i = 0, (math.floor((b - a) / step)) do
         t[i] = a + i * (step or 1)
     end
     return t
@@ -123,6 +159,20 @@ function UTILS.dump(o)
         return tostring(o)
     end
 end
+function UTILS.dumpi(o)
+    if type(o) == "table" then
+        local s = "{ "
+        for k, v in ipairs(o) do
+            if type(k) ~= "number" then
+                k = '"' .. k .. '"'
+            end
+            s = s .. UTILS.dumpi(v) .. ","
+        end
+        return s .. "} "
+    else
+        return tostring(o)
+    end
+end
 function UTILS.all(t, f)
     for i = t[0] and 0 or 1, #t do
         if not f(t[i]) then
@@ -162,13 +212,13 @@ function UTILS.uniq(t)
 end
 local p = print
 local f = nil
-local asdasdasd
 function UTILS.print(x)
     if not f then
         local ff = assert(io.open("logs.txt", "w"))
         ff:write("")
         ff:close()
         f = assert(io.open("logs.txt", "a"))
+        asdasdsssasd = f
     end
     local str = UTILS.dump(x)
     f:write(str .. "\n")
