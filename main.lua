@@ -2,7 +2,7 @@ require "nes"
 Nes = nil
 local width = 256
 local height = 240
-local pixSize = 1
+local pixSize = 2
 function love.load(arg)
     --[[
     love.profiler = require("libs/profile")
@@ -38,9 +38,11 @@ function love.draw()
         local g = bit.rshift(bit.band(px, 0x0000ff00), 8)
         local b = bit.band(px, 0x000000ff)
         --]]
-        local r = px[1]
-        local g = px[2]
-        local b = px[3]
+        --[
+        local r = px[1] / 256
+        local g = px[2] / 256
+        local b = px[3] / 256
+        --]]
         for j = 0, pixSize - 1 do
             for k = 0, pixSize - 1 do
                 local xx = 1 + pixSize * (x) + j
@@ -50,9 +52,27 @@ function love.draw()
             end
         end
     end
+    -- draw palette
+    --[
+    local palette = Nes.cpu.ppu.output_color
+    local w,h = 10,10
+    local x,y = 700,500
+    local row,column = 4, 8
+    for i=1,#palette do
+        local px = palette[i]
+        if px then 
+        local r = px[1] / 256
+        local g = px[2] / 256
+        local b = px[3] / 256
+        love.graphics.setColor( r, g, b, 1 )
+        love.graphics.rectangle("fill", x+((i-1)%row)*w, y+math.floor((i-1)/4)*h, w, h )
+        end
+    end
+        love.graphics.setColor( 1, 1, 1, 1 )
+    --]]
     --image = love.graphics.newImage(imageData)
     image:replacePixels(imageData)
-    love.graphics.draw(image, 0, 0)
+    love.graphics.draw(image, 50, 50)
     love.graphics.print("Current FPS: " .. tostring(love.timer.getFPS()), 10, 10)
     --]]
     --[[
