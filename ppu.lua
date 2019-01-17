@@ -244,7 +244,7 @@ function PPU:reset(mapping)
     self.sp_buffer = fill({}, 0, self.sp_limit)
     self.sp_buffered = 0
     self.sp_visible = false
-    self.sp_map = fill({}, CPU.UNDEFINED, 264) -- [[behind?, zero?, color]]
+    self.sp_map = {} -- [[behind?, zero?, color]]
     self.sp_map_buffer =
         map(
         range(0, 264),
@@ -786,8 +786,8 @@ function PPU:load_sprite(pat0, pat1, buffer_idx)
     local x_base = self.sp_buffer[buffer_idx + 4]
     local palette_base = 0x10 + lshift(band(byte2, 3), 2) -- OAM byte2 bit0-1: Palette
     if not self.sp_visible then
-        self.sp_visible = self.sp_map
-        clear(self.sp_map)
+        self.sp_visible = true
+        self.sp_map = {}
     end
     for i = 1, 8 do
         local x = x_base + i
@@ -931,9 +931,11 @@ function PPU:set_bg_pxs(idx, v)
 end
 
 function PPU:load_tiles()
+    --[[
     if not self.any_show then
         return
     end
+    ]]
     --self.bg_pixels = rotate(self.bg_pixels, 8)
     self.bg_pixels_idx = rotatePositiveIdxRaw(self.bg_pixels_idx + 8, self.bg_pixels_size)
     local patt = self.bg_pattern_lut[self.bg_pattern]
@@ -944,9 +946,11 @@ function PPU:load_tiles()
 end
 
 function PPU:evaluate_sprites_even()
+    --[[
     if not self.any_show then
         return
     end
+    --]]
     --[[
     print "evaluate_sprites_even"
     print(self.sp_ram[self.sp_addr + 1])
@@ -1163,50 +1167,50 @@ function PPU:batch_render_eight_pixels()
     local pixel
     local output_color = self.output_color
     local clr = output_color[1]
-    if self.any_show then
-        if self.sp_active then
-            if self.bg_enabled then
-                local hclk255 = self.hclk ~= 255
-                for i = 1, 8 do
-                    local px = self:index_bg_pxs(i)
-                    local sprite = self.sp_map[self.hclk + i - 1]
-                    if sprite then
-                        if px % 4 == 0 then
+    --if self.any_show then
+    if self.sp_active then
+        if self.bg_enabled then
+            local hclk255 = self.hclk ~= 255
+            for i = 1, 8 do
+                local px = self:index_bg_pxs(i)
+                local sprite = self.sp_map[self.hclk + i - 1]
+                if sprite then
+                    if px % 4 == 0 then
+                        px = sprite[2]
+                    else
+                        if sprite[1] and hclk255 then
+                            self.sp_zero_hit = true
+                        end
+                        if not sprite[0] then
                             px = sprite[2]
-                        else
-                            if sprite[1] and hclk255 then
-                                self.sp_zero_hit = true
-                            end
-                            if not sprite[0] then
-                                px = sprite[2]
-                            end
                         end
                     end
-                    px = output_color[1 + px]
-                    self.output_pixels[self.output_pixels_size + i] = px or clr
                 end
-            else
-                for i = 1, 8 do
-                    local sprite = self.sp_map[self.hclk + i - 1]
-                    local px = output_color[sprite and (sprite[2] + 1) or 1]
-                    self.output_pixels[self.output_pixels_size + i] = px or clr
-                end
+                px = output_color[1 + px]
+                self.output_pixels[self.output_pixels_size + i] = px or clr
             end
         else
-            if self.bg_enabled then
-                for i = 1, 8 do
-                    local v = self:index_bg_pxs((self.hclk % 8) + i)
-                    local px = output_color[1 + v]
-                    self.output_pixels[self.output_pixels_size + i] = px or clr
-                end
-            else
-                for i = 1, 8 do
-                    self.output_pixels[self.output_pixels_size + i] = clr
-                end
+            for i = 1, 8 do
+                local sprite = self.sp_map[self.hclk + i - 1]
+                local px = output_color[sprite and (sprite[2] + 1) or 1]
+                self.output_pixels[self.output_pixels_size + i] = px or clr
             end
         end
-        self.output_pixels_size = self.output_pixels_size + 8
+    else
+        if self.bg_enabled then
+            for i = 1, 8 do
+                local v = self:index_bg_pxs((self.hclk % 8) + i)
+                local px = output_color[1 + v]
+                self.output_pixels[self.output_pixels_size + i] = px or clr
+            end
+        else
+            for i = 1, 8 do
+                self.output_pixels[self.output_pixels_size + i] = clr
+            end
+        end
     end
+    self.output_pixels_size = self.output_pixels_size + 8
+    --end
 end
 
 function PPU:boot()
