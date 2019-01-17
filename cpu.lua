@@ -316,8 +316,7 @@ end
 
 function CPU:clear_irq(line)
     local old_irq_flags = band(self.irq_flags, bor(CPU.IRQ_FRAME, CPU.IRQ_DMC))
-    self.irq_flags =
-        band(bxor(self.irq_flags, bxor(line, bor(bor(CPU.IRQ_EXT, CPU.IRQ_FRAME), CPU.IRQ_DMC))))
+    self.irq_flags = band(bxor(self.irq_flags, bxor(line, bor(bor(CPU.IRQ_EXT, CPU.IRQ_FRAME), CPU.IRQ_DMC))))
     if self.irq_flags == 0 then
         self.clk_irq = CPU.FOREVER_CLOCK
     end
@@ -1287,24 +1286,17 @@ function CPU:run_once()
     if self.ppu_sync then
         self.ppu:sync(self.clk)
     end
-    --print(self.clk)
-    asd = asd + 1
-    if asd > 350000000 then
-        if asdasdsssasd then
-        asdasdsssasd:flush()
-        asdasdsssasd:close()
-        end
-        error "asd"
-    end
 end
 function CPU:run()
     --print "run"
     --print(0xfffc)
     --print(self._pc)
     self:do_clock()
+    local run = self.run_once
+    local do_clock = self.do_clock
     repeat
         repeat
-            self:run_once() --[[
+            run(self) --[[
             printf("STEP1")
             printf("%04X", self.clk)
             printf("%04X", self.clk_target)
@@ -1315,7 +1307,7 @@ function CPU:run()
         printf("STEP2")
         printf("%04X", self.clk_target)
         ]]
-        self:do_clock()
+        do_clock(self)
     until not (self.clk < self.clk_frame)
     --[[
     printf("STEP3")
