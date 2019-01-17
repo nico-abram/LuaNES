@@ -204,7 +204,6 @@ function PPU:reset(mapping)
     self.bg_show = false
     self.bg_show_edge = false
     self.bg_pixels = fill({}, 0, 16)
-    self.bg_pixels_size = 0
     self.bg_pixels_idx = 0
     self.bg_pattern_base = 0 -- == 0 or 0x1000
     self.bg_pattern_base_15 = 0 -- == self.bg_pattern_base[12] << 15
@@ -611,7 +610,7 @@ function PPU:poke_2005(_addr, data)
         self.scroll_latch = bor(band(self.scroll_latch, 0x7fe0), rshift(data, 3))
         local xfine = 8 - band(data, 0x7)
         --self.bg_pixels = rotate(self.bg_pixels, self.scroll_xfine - xfine)
-    self.bg_pixels_idx = rotatePositiveIdx(self.bg_pixels, self.bg_pixels_idx+self.scroll_xfine - xfine, self.bg_pixels_size)
+    self.bg_pixels_idx = rotatePositiveIdx(self.bg_pixels, self.bg_pixels_idx+self.scroll_xfine - xfine)
         self.scroll_xfine = xfine
     else
         self.scroll_latch =
@@ -924,19 +923,19 @@ function PPU:preload_tiles()
         return
     end
     local patt = self.bg_pattern_lut[self.bg_pattern]
-    local length = self.bg_pixels_size
+    local length = #self.bg_pixels
     local idx = self.scroll_xfine+1
     for i = 0, 7 do --8 do
         self:set_bg_pxs(i+idx, patt[i], length)
     end
 end
 
-function PPU:index_bg_pxs(idx)
-    return self.bg_pixels[rotatePositiveIdx(self.bg_pixels, self.bg_pixels_idx+idx, self.bg_pixels_size)]
+function PPU:index_bg_pxs(idx, size)
+    return self.bg_pixels[rotatePositiveIdx(self.bg_pixels, self.bg_pixels_idx+idx, size)]
 end
 
 function PPU:set_bg_pxs(idx, v, size)
-    self.bg_pixels[rotatePositiveIdx(self.bg_pixels, self.bg_pixels_idx+idx, size or self.bg_pixels_size)] = v
+    self.bg_pixels[rotatePositiveIdx(self.bg_pixels, self.bg_pixels_idx+idx, size)] = v
 end
 
 function PPU:load_tiles()
@@ -944,7 +943,7 @@ function PPU:load_tiles()
         return
     end
     --self.bg_pixels = rotate(self.bg_pixels, 8)
-    local length = self.bg_pixels_size
+    local length = #self.bg_pixels
     self.bg_pixels_idx = rotatePositiveIdx(self.bg_pixels, self.bg_pixels_idx+8, length)
     local patt = self.bg_pattern_lut[self.bg_pattern]
     local idx = self.scroll_xfine+1
@@ -1158,11 +1157,7 @@ function PPU:render_pixel()
     do return end
 --]]
     if not self.any_show then
-        local idx = self.hclk % 8 + 1
-        if idx > self.bg_pixels_size then
-            self.bg_pixels_size = idx
-        end
-        self:set_bg_pxs(idx, 0)
+        self:set_bg_pxs(self.hclk % 8 + 1, 0)
         local px = self.output_color[band(self.scroll_addr_5_14, 0x3f00) == 0x3f00 and self.scroll_addr_0_4 or 0]
         if px then
             self.output_pixels_size = self.output_pixels_size + 1
