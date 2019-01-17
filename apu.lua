@@ -487,9 +487,9 @@ function MIXER:sample()
   local sample = (P_0 * dac0 / (P_1 + P_2 * dac0)) + (TND_0 * dac1 / (TND_1 + TND_2 * dac1))
 
   self.acc = self.acc - self.prev
-  self.prev = bit.lshift(sample, 15)
+  self.prev = lshift(sample, 15)
   self.acc = self.acc + self.prev - self.next * 3 -- POLE
-  self.next = bit.rshift(self.acc, 15)
+  self.next = rshift(self.acc, 15)
   sample = self.next
 
   if sample < -0x7fff then
@@ -558,14 +558,14 @@ end
 function Oscillator:poke_3(_addr, data)
   local delta = self.apu:update_delta()
   if self.wave_length then
-    self.wave_length = bor(band(self.wave_length, 0x00ff), bit.lshift(band(data, 0x07), 8))
+    self.wave_length = bor(band(self.wave_length, 0x00ff), lshift(band(data, 0x07), 8))
     self:update_freq()
   end
   if self.envelope then
     self.envelope:reset_clock()
   end
   if self.length_counter then
-    self.length_counter:write(bit.rshift(data, 3), delta)
+    self.length_counter:write(rshift(data, 3), delta)
   end
   self.is_active = self:active()
 end
@@ -634,7 +634,7 @@ end
 function Pulse:update_freq()
   if
     self.wave_length >= Pulse.MIN_FREQ and
-      self.wave_length + band(self.sweep_increase, bit.rshift(self.wave_length, self.sweep_shift)) <= Pulse.MAX_FREQ
+      self.wave_length + band(self.sweep_increase, rshift(self.wave_length, self.sweep_shift)) <= Pulse.MAX_FREQ
    then
     self.freq = (self.wave_length + 1) * 2 * self.fixed
     self.valid_freq = true
@@ -646,7 +646,7 @@ end
 
 function Pulse:poke_0(_addr, data)
   self._parent:poke_0(self)
-  self.form = Pulse.WAVE_FORM[band(bit.rshift(data, 6), 3)]
+  self.form = Pulse.WAVE_FORM[band(rshift(data, 6), 3)]
 end
 
 function Pulse:poke_1(_addr, data)
@@ -655,7 +655,7 @@ function Pulse:poke_1(_addr, data)
   self.sweep_shift = band(data, 0x07)
   self.sweep_rate = 0
   if nthBitIsSetInt( data,7) == 1 and self.sweep_shift > 0 then
-    self.sweep_rate = band(bit.rshift(data, 4), 0x07) + 1
+    self.sweep_rate = band(rshift(data, 4), 0x07) + 1
     self.sweep_reload = true
   end
   return self:update_freq()
@@ -675,7 +675,7 @@ function Pulse:clock_sweep(complement)
     if self.sweep_count == 0 then
       self.sweep_count = self.sweep_rate
       if self.wave_length >= Pulse.MIN_FREQ then
-        local shifted = bit.rshift(self.wave_length, self.sweep_shift)
+        local shifted = rshift(self.wave_length, self.sweep_shift)
         if self.sweep_increase == 0 then
           self.wave_length = self.wave_length + complement - shifted
           self:update_freq()
@@ -706,12 +706,12 @@ function Pulse:sample()
           v = self.freq
         end
         self.step = band((self.step + 1), 7)
-        sum = sum + bit.rshift(v, self.form[self.step])
+        sum = sum + rshift(v, self.form[self.step])
         self.timer = self.timer + self.freq
       until not (self.timer < 0)
       self.amp = (sum * self.envelope.output + self.rate / 2) / self.rate
     else
-      self.amp = bit.rshift(self.envelope.output, self.form[self.step])
+      self.amp = rshift(self.envelope.output, self.form[self.step])
     end
   else
     if self.timer < 0 then
@@ -984,17 +984,17 @@ function DMC:poke_1(_addr, data)
 end
 
 function DMC:poke_2(_addr, data)
-  self.regs_address = bor(0xc000, bit.lshift(data, 6))
+  self.regs_address = bor(0xc000, lshift(data, 6))
 end
 
 function DMC:poke_3(_addr, data)
-  self.regs_length_counter = bit.lshift(data, 4) + 1
+  self.regs_length_counter = lshift(data, 4) + 1
 end
 
 function DMC:clock_dac()
   if self.out_active then
-    n = self.out_dac + bit.lshift(band(self.out_buffer, 1), 2) - 2
-    self.out_buffer = bit.rshift(self.out_buffer, 1)
+    n = self.out_dac + lshift(band(self.out_buffer, 1), 2) - 2
+    self.out_buffer = rshift(self.out_buffer, 1)
     if 0 <= n and n <= 0x7f and n ~= self.out_dac then
       self.out_dac = n
       return true

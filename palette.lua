@@ -90,10 +90,10 @@ function PALETTE:defacto_palette()
                     0x000000
                 },
                 function(rgb)
-                    local r = math.min(math.floor(band(bit.rshift(rgb, 16), 0xff) * rf), 0xff)
-                    local g = math.min(math.floor(band(bit.rshift(rgb, 8), 0xff) * gf), 0xff)
-                    local b = math.min(math.floor(band(bit.rshift(rgb, 0), 0xff) * bf), 0xff)
-                    --return bor(0x00000000, bit.lshift(r, 16), bit.lshift(g, 8), b)
+                    local r = math.min(math.floor(band(rshift(rgb, 16), 0xff) * rf), 0xff)
+                    local g = math.min(math.floor(band(rshift(rgb, 8), 0xff) * gf), 0xff)
+                    local b = math.min(math.floor(band(rshift(rgb, 0), 0xff) * bf), 0xff)
+                    --return bor(0x00000000, lshift(r, 16), lshift(g, 8), b)
                     return {r, g, b}
                 end
             )
@@ -107,7 +107,7 @@ function PALETTE:nestopia_palette()
     return map(
         range(0, 511),
         function(n)
-            local tint, level, color = band(bit.rshift(n, 6), 7), band(bit.rshift(n, 4), 3), band(n, 0x0f)
+            local tint, level, color = band(rshift(n, 6), 7), band(rshift(n, 4), 3), band(n, 0x0f)
             local t = ({{-0.12, 0.40}, {0.00, 0.68}, {0.31, 1.00}, {0.72, 1.00}})[level + 1]
             local level0, level1 = t[1], t[2]
             if color == 0x00 then

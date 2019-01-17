@@ -2,6 +2,8 @@ band = bit.band
 bor = bit.bor
 bxor = bit.bxor
 bnot = bit.bnot
+lshift = bit.lshift
+rshift = bit.rshift
 require "libs/serpent"
 require "utils"
 NES = {}

@@ -34,11 +34,11 @@ end
     -- APIs
 
     function Pads:keydown(pad, btn)
-      self.pads[pad].buttons = bor(self.pads[pad].buttons , bit.lshift(1 , btn))
+      self.pads[pad].buttons = bor(self.pads[pad].buttons , lshift(1 , btn))
     end
 
     function Pads:keyup(pad, btn)
-      self.pads[pad].buttons = band(self.pads[pad].buttons,bnot( bit.lshift(1 , btn)))
+      self.pads[pad].buttons = band(self.pads[pad].buttons,bnot( lshift(1 , btn)))
     end
 
   -- each pad
@@ -66,7 +66,7 @@ Pad.A      = 0
       local prev = self.strobe
       self.strobe = nthBitIsSetInt(data,0)== 1 
       if prev and not self.strobe then 
-        self.stream = bxor(bit.lshift(self:poll_state(),1), -512) 
+        self.stream = bxor(lshift(self:poll_state(),1), -512) 
     end
     end
 
@@ -74,7 +74,7 @@ Pad.A      = 0
       if self.strobe then 
         return band( self:poll_state(), 1 )
       end
-      self.stream = bit.rshift(self.stream, 1)
+      self.stream = rshift(self.stream, 1)
       return nthBitIsSetInt( self.stream,0)
     end
 

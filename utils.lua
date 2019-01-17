@@ -68,6 +68,12 @@ function UTILS.indexRotating(t, idx)
     return t[UTILS.rotateIdx(t,idx)]
 end
 
+
+function UTILS.rotatePositiveIdx(t, idx, size)
+    size = size or #t
+    return ((idx - 1) % size) +1
+end
+
 function UTILS.rotateIdx(t, idx, size)
     size = size or #t
     if idx > size then
@@ -125,7 +131,7 @@ function UTILS.rotateNew(t, r)
     return rotated
 end
 function UTILS.nthBitIsSet(n, nth)
-    return band(n, bit.lshift(0x1, nth)) ~= 0
+    return band(n, lshift(0x1, nth)) ~= 0
 end
 function UTILS.nthBitIsSetInt(n, nth)
     return UTILS.nthBitIsSet(n, nth) and 1 or 0

@@ -204,6 +204,7 @@ function PPU:reset(mapping)
     self.bg_show = false
     self.bg_show_edge = false
     self.bg_pixels = fill({}, 0, 16)
+    self.bg_pixels_size = 0
     self.bg_pixels_idx = 0
     self.bg_pattern_base = 0 -- == 0 or 0x1000
     self.bg_pattern_base_15 = 0 -- == self.bg_pattern_base[12] << 15
@@ -265,9 +266,9 @@ function PPU:setup_lut()
         map(
         range(0, 0xffff),
         function(i)
-            local nmt_bank = self.nmt_ref[band(bit.rshift(i, 10), 3)]
+            local nmt_bank = self.nmt_ref[band(rshift(i, 10), 3)]
             local nmt_idx = band(i, 0x03ff)
-            local fixed = bor(band(bit.rshift(i, 12), 7), bit.lshift(nthBitIsSetInt(i, 15), 12))
+            local fixed = bor(band(rshift(i, 12), 7), lshift(nthBitIsSetInt(i, 15), 12))
             -- WTF
             --(((self.lut_update[nmt_bank] or= [])[nmt_idx] or= [nil, nil])[0] or= []) << [i, fixed]
             if not self.lut_update[nmt_bank] then
@@ -282,7 +283,7 @@ function PPU:setup_lut()
             end
             upd = upd[1]
             upd[#upd + 1] = {i, fixed}
-            return bor(bit.lshift(nmt_bank[nmt_idx], 4), fixed)
+            return bor(lshift(nmt_bank[nmt_idx], 4), fixed)
         end
     )
 
@@ -295,17 +296,17 @@ function PPU:setup_lut()
                 bor(
                 0x23c0,
                 band(i, 0x0c00),
-                band(bit.rshift(i, 4), 0x0038),
-                band(bit.rshift(i, 2), 0x0007)
+                band(rshift(i, 4), 0x0038),
+                band(rshift(i, 2), 0x0007)
             )
-            local nmt_bank = self.nmt_ref[band(bit.rshift(io_addr, 10), 3)]
+            local nmt_bank = self.nmt_ref[band(rshift(io_addr, 10), 3)]
             local nmt_idx = band(io_addr, 0x03ff)
-            local attr_shift = bor(band(i, 2), band(bit.rshift(i, 4), 4))
+            local attr_shift = bor(band(i, 2), band(rshift(i, 4), 4))
             local key = tostring(io_addr) .. "-" .. tostring(attr_shift)
             if not entries[key] then
                 entries[key] = {
                     io_addr,
-                    PPU.TILE_LUT[1+band(bit.rshift(nmt_bank[nmt_idx], attr_shift), 3)],
+                    PPU.TILE_LUT[1+band(rshift(nmt_bank[nmt_idx], attr_shift), 3)],
                     attr_shift
                 }
             end
@@ -329,7 +330,7 @@ function PPU:setup_lut()
     --.freeze
     -- FREZE WTF
     for k,v in pairs(entries) do
-        entries[k] = UTILS.uniq(v)
+        entries[k] = uniq(v)
     end
 
     return entries
@@ -464,13 +465,13 @@ end
 
 function PPU:make_sure_invariants()
     self.name_io_addr = bor(band(bor(self.scroll_addr_0_4, self.scroll_addr_5_14), 0x0fff), 0x2000)
-    local a = self.nmt_ref[band(bit.rshift(self.io_addr, 10), 3)][band(self.io_addr, 0x03ff)]
+    local a = self.nmt_ref[band(rshift(self.io_addr, 10), 3)][band(self.io_addr, 0x03ff)]
     local b = bor(band(self.scroll_addr_0_4, 0x2), (nthBitIsSetInt(self.scroll_addr_5_14, 6) * 0x4))
-    local idx = 1 + band(bit.rshift(a, b), 3)
+    local idx = 1 + band(rshift(a, b), 3)
     --[[
     print "make_sure_invariants"
     print(self.io_addr)
-    print(band(bit.rshift(self.io_addr, 10), 3))
+    print(band(rshift(self.io_addr, 10), 3))
     print(band(self.io_addr, 0x03ff))
     print(a)
     print(b)
@@ -497,7 +498,7 @@ function PPU:poke_2000(_addr, data)
     self:update(PPU.RP2C02_CC)
     local need_nmi_old = self.need_nmi
 
-    self.scroll_latch = bor(band(self.scroll_latch, 0x73ff), bit.lshift(band(data, 0x03), 10))
+    self.scroll_latch = bor(band(self.scroll_latch, 0x73ff), lshift(band(data, 0x03), 10))
     self.vram_addr_inc = nthBitIsSetInt(data, 2) == 1 and 32 or 1
     self.sp_base = nthBitIsSetInt(data, 3) == 1 and 0x1000 or 0x0000
     self.bg_pattern_base = (nthBitIsSetInt(data, 4) == 1) and 0x1000 or 0x0000
@@ -506,7 +507,7 @@ function PPU:poke_2000(_addr, data)
 
     self.io_latch = data
     self.pattern_end = (self.sp_base ~= 0 or self.sp_height == 16) and 0x1ff0 or 0x0ff0
-    self.bg_pattern_base_15 = bit.lshift(nthBitIsSetInt(self.bg_pattern_base, 12), 15)
+    self.bg_pattern_base_15 = lshift(nthBitIsSetInt(self.bg_pattern_base, 12), 15)
 
     if self.need_nmi and self.vblank and not need_nmi_old then
         local clock = self.cpu:current_clock() + PPU.RP2C02_CC
@@ -530,7 +531,7 @@ function PPU:poke_2001(_addr, data)
     self.sp_show_edge = nthBitIsSetInt(data, 2) == 1 and self.sp_show
     self.any_show = self.bg_show or self.sp_show
     self.coloring = nthBitIsSetInt(data, 0) == 1 and 0x30 or 0x3f -- 0x30: monochrome
-    self.emphasis = bit.lshift(band(data, 0xe0), 1)
+    self.emphasis = lshift(band(data, 0xe0), 1)
 
     self.io_latch = data
 
@@ -607,16 +608,16 @@ function PPU:poke_2005(_addr, data)
     self.io_latch = data
     self.scroll_toggle = not self.scroll_toggle
     if self.scroll_toggle then
-        self.scroll_latch = bor(band(self.scroll_latch, 0x7fe0), bit.rshift(data, 3))
+        self.scroll_latch = bor(band(self.scroll_latch, 0x7fe0), rshift(data, 3))
         local xfine = 8 - band(data, 0x7)
         --self.bg_pixels = rotate(self.bg_pixels, self.scroll_xfine - xfine)
-    self.bg_pixels_idx = UTILS.rotateIdx(self.bg_pixels, self.bg_pixels_idx+self.scroll_xfine - xfine)
+    self.bg_pixels_idx = rotatePositiveIdx(self.bg_pixels, self.bg_pixels_idx+self.scroll_xfine - xfine, self.bg_pixels_size)
         self.scroll_xfine = xfine
     else
         self.scroll_latch =
             bor(
             band(self.scroll_latch, 0x0c1f),
-            band(bor(bit.lshift(data, 2), bit.lshift(data, 12)), 0x73e0)
+            band(bor(lshift(data, 2), lshift(data, 12)), 0x73e0)
         )
     end
 end
@@ -627,7 +628,7 @@ function PPU:poke_2006(_addr, data)
     self.io_latch = data
     self.scroll_toggle = not self.scroll_toggle
     if self.scroll_toggle then
-        self.scroll_latch = bor(band(self.scroll_latch, 0x00ff), bit.lshift(band(data, 0x3f), 8))
+        self.scroll_latch = bor(band(self.scroll_latch, 0x00ff), lshift(band(data, 0x3f), 8))
     else
         self.scroll_latch = bor(band(self.scroll_latch, 0x7f00), data)
         self.scroll_addr_0_4 = band(self.scroll_latch, 0x001f)
@@ -657,7 +658,7 @@ function PPU:poke_2007(_addr, data)
         addr = band(addr, 0x3fff)
         if addr >= 0x2000 then
             --print "poke 2007 nmt ref"
-            local nmt_bank = self.nmt_ref[band(bit.rshift(addr, 10), 0x3)]
+            local nmt_bank = self.nmt_ref[band(rshift(addr, 10), 0x3)]
             local nmt_idx = band(addr, 0x03ff)
             if nmt_bank[nmt_idx] ~= data then
                 nmt_bank[nmt_idx] = data
@@ -666,16 +667,16 @@ function PPU:poke_2007(_addr, data)
                 if name_lut_update then
                     for i = 1, #name_lut_update do
                         local t = name_lut_update[i]
-                        self.name_lut[t[1]] = bor(bit.lshift(data, 4), t[2])
+                        self.name_lut[t[1]] = bor(lshift(data, 4), t[2])
                     end
-                --name_lut_update.each {|i, b| self.name_lut[i] = bor(bit.lshift(data , 4) , b) }
+                --name_lut_update.each {|i, b| self.name_lut[i] = bor(lshift(data , 4) , b) }
                 end
                 if attr_lut_update then
                     for i =  1, #attr_lut_update do
                         local a = attr_lut_update[i]
-                        a[2] = PPU.TILE_LUT[1 + band(bit.rshift(data, a[3]), 3)]
+                        a[2] = PPU.TILE_LUT[1 + band(rshift(data, a[3]), 3)]
                     end
-                --attr_lut_update.each {|a| a[1] = PPU.TILE_LUT[band(bit.rshift(data , a[2]) , 3)] }
+                --attr_lut_update.each {|a| a[1] = PPU.TILE_LUT[band(rshift(data , a[2]) , 3)] }
                 end
             end
         elseif self.chr_mem_writable then
@@ -693,7 +694,7 @@ function PPU:peek_2007(_addr)
         band(addr, 0x3f00) ~= 0x3f00 and self.io_buffer or
         band(self.palette_ram[band(addr, 0x1f) + 1], self.coloring)
     self.io_buffer =
-        addr >= 0x2000 and self.nmt_ref[band(bit.rshift(addr, 10), 0x3)][band(addr, 0x3ff)] or
+        addr >= 0x2000 and self.nmt_ref[band(rshift(addr, 10), 0x3)][band(addr, 0x3ff)] or
         self.chr_mem[addr + 1]
     return self.io_latch
 end
@@ -721,7 +722,7 @@ function PPU:poke_4014(_addr, data) -- DMA
     --print(self.cpu.clk)
     self:update(PPU.RP2C02_CC)
     self.cpu:steal_clocks(CPU.CLK[1])
-    data = bit.lshift(data, 8)
+    data = lshift(data, 8)
     if
         self.regs_oam == 0 and data < 0x2000 and
             ((not self.any_show) or self.cpu:current_clock() <= PPU.RP2C02_HVINT - CPU.CLK[1] * 512)
@@ -768,11 +769,11 @@ function PPU:open_sprite(buffer_idx)
     local addr =
         self.sp_height == 16 and
         bor(
-            bit.lshift(band(byte1, 0x01), 12),
-            bit.lshift(band(byte1, 0xfe), 4), 
+            lshift(band(byte1, 0x01), 12),
+            lshift(band(byte1, 0xfe), 4), 
             (nthBitIsSetInt(tmp, 3) * 0x10)
         ) or
-        bor(self.sp_base, bit.lshift(byte1, 4))
+        bor(self.sp_base, lshift(byte1, 4))
     return bor(addr, band(tmp, 7))
 end
 
@@ -788,19 +789,19 @@ function PPU:load_sprite(pat0, pat1, buffer_idx)
     --]]
     local pat =
         bor(
-        band(bit.rshift(pat0, 1), 0x55),
+        band(rshift(pat0, 1), 0x55),
         band(pat1, 0xaa),
-        bit.lshift(bor(band(pat0, 0x55), band(bit.lshift(pat1, 1), 0xaa)), 8)
+        lshift(bor(band(pat0, 0x55), band(lshift(pat1, 1), 0xaa)), 8)
     )
     local x_base = self.sp_buffer[buffer_idx + 4]
-    local palette_base = 0x10 + bit.lshift(band(byte2, 3), 2) -- OAM byte2 bit0-1: Palette
+    local palette_base = 0x10 + lshift(band(byte2, 3), 2) -- OAM byte2 bit0-1: Palette
     if not self.sp_visible then
         self.sp_visible = self.sp_map
-        UTILS.clear(self.sp_map)
+        clear(self.sp_map)
     end
     for i = 1, 8 do
         local x = x_base + i
-        local clr = band(bit.rshift(pat, (pos[i] * 2)), 3)
+        local clr = band(rshift(pat, (pos[i] * 2)), 3)
         if not (self.sp_map[x] or clr == 0) then
             local sprite = self.sp_map_buffer[x]
             self.sp_map[x] = sprite
@@ -923,19 +924,19 @@ function PPU:preload_tiles()
         return
     end
     local patt = self.bg_pattern_lut[self.bg_pattern]
-    local length = #self.bg_pixels
-    local idx = self.bg_pixels_idx+self.scroll_xfine
+    local length = self.bg_pixels_size
+    local idx = self.scroll_xfine+1
     for i = 0, 7 do --8 do
-        self.bg_pixels[((idx + i)%length)+1] = patt[i]
+        self:set_bg_pxs(i+idx, patt[i], length)
     end
 end
 
 function PPU:index_bg_pxs(idx)
-    return self.bg_pixels[UTILS.rotateIdx(self.bg_pixels, self.bg_pixels_idx+idx)]
+    return self.bg_pixels[rotatePositiveIdx(self.bg_pixels, self.bg_pixels_idx+idx, self.bg_pixels_size)]
 end
 
-function PPU:set_bg_pxs(idx, v)
-    self.bg_pixels[UTILS.rotateIdx(self.bg_pixels, self.bg_pixels_idx+idx)] = v
+function PPU:set_bg_pxs(idx, v, size)
+    self.bg_pixels[rotatePositiveIdx(self.bg_pixels, self.bg_pixels_idx+idx, size or self.bg_pixels_size)] = v
 end
 
 function PPU:load_tiles()
@@ -943,12 +944,12 @@ function PPU:load_tiles()
         return
     end
     --self.bg_pixels = rotate(self.bg_pixels, 8)
-    self.bg_pixels_idx = UTILS.rotateIdx(self.bg_pixels, self.bg_pixels_idx+8)
+    local length = self.bg_pixels_size
+    self.bg_pixels_idx = rotatePositiveIdx(self.bg_pixels, self.bg_pixels_idx+8, length)
     local patt = self.bg_pattern_lut[self.bg_pattern]
-    local length = #self.bg_pixels
-    local idx = self.bg_pixels_idx+self.scroll_xfine
+    local idx = self.scroll_xfine+1
     for i = 0, 7 do --8 do
-        self.bg_pixels[((idx + i) % length) + 1] = patt[i]
+        self:set_bg_pxs(i+idx, patt[i], length)
     end
 end
 
@@ -1157,7 +1158,11 @@ function PPU:render_pixel()
     do return end
 --]]
     if not self.any_show then
-        self:set_bg_pxs(self.hclk % 8 + 1, 0)
+        local idx = self.hclk % 8 + 1
+        if idx > self.bg_pixels_size then
+            self.bg_pixels_size = idx
+        end
+        self:set_bg_pxs(idx, 0)
         local px = self.output_color[band(self.scroll_addr_5_14, 0x3f00) == 0x3f00 and self.scroll_addr_0_4 or 0]
         if px then
             self.output_pixels_size = self.output_pixels_size + 1
@@ -1194,14 +1199,12 @@ function PPU:batch_render_eight_pixels()
                     px = output_color[1+px]
                     self.output_pixels[self.output_pixels_size+i] = px or clr
                 end
-                self.output_pixels_size = self.output_pixels_size + 8
             else
                 for i=1,8 do
                     local sprite = self.sp_map[self.hclk + i - 1]
                     local px = output_color[sprite and (sprite[2]+1) or 1]
                     self.output_pixels[self.output_pixels_size+i] = px or clr
                 end
-                self.output_pixels_size = self.output_pixels_size + 8
             end
         else
             if self.bg_enabled then
@@ -1210,14 +1213,13 @@ function PPU:batch_render_eight_pixels()
                     local px = output_color[1+v]
                     self.output_pixels[self.output_pixels_size+i] = px or clr
                 end
-                self.output_pixels_size = self.output_pixels_size + 8
             else
                 for i=1,8 do
                     self.output_pixels[self.output_pixels_size+i] = clr
                 end
-                self.output_pixels_size = self.output_pixels_size + 8
             end
         end
+        self.output_pixels_size = self.output_pixels_size + 8
     end
 end
 

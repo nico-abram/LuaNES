@@ -80,7 +80,7 @@ function ROM:initialize(conf, cpu, ppu, basename, bytes, str)
         map(
             range(0x6000, 0x7fff),
             function(n)
-                return bit.rshift(n, 8)
+                return rshift(n, 8)
             end
         ) or
         nil
@@ -117,7 +117,7 @@ function ROM:inspect()
 end
 
 function ROM:peek_6000(addr)
-    return self.wrk_readable and self.wrk[addr - 0x6000] or bit.rshift(addr, 8)
+    return self.wrk_readable and self.wrk[addr - 0x6000] or rshift(addr, 8)
 end
 
 function ROM:poke_6000(addr, data)
@@ -170,7 +170,7 @@ function ROM.load(conf, cpu, ppu)
     for i = 1, str:len() do
         blob[i] = str:byte(i, i)
     end
-    local mapper = bor(bit.rshift(blob[7], 4), band(blob[8], 0xf0))
+    local mapper = bor(rshift(blob[7], 4), band(blob[8], 0xf0))
 
     --print "amper"
     --print(mapper)
@@ -193,7 +193,7 @@ function ROM:parse_header(buf, str)
         prg_pages = buf[5],
         chr_pages = buf[6],
         battery = nthBitIsSet(buf[7], 1),
-        mapper = bor(bit.rshift(buf[7], 4), band(buf[8], 0xf0)),
+        mapper = bor(rshift(buf[7], 4), band(buf[8], 0xf0)),
         mapping = not nthBitIsSet(buf[7], 0) and "horizontal" or "vertical"
     }
     if header.check ~= "NES\x1a" then
@@ -216,7 +216,7 @@ function ROM:parse_header(buf, str)
         self.mirroring = "four_screen"
     end
     self.battery = nthBitIsSet(buf[7], 1)
-    self.mapper = bor(bit.rshift(buf[7], 4), band(buf[8], 0xf0))
+    self.mapper = bor(rshift(buf[7], 4), band(buf[8], 0xf0))
     local ram_banks = math.max(1, buf[9])
 
     return prg_banks, chr_banks, ram_banks
@@ -307,14 +307,14 @@ function MMC1:poke_prg(addr, val)
         self.shift = 0
         self.shift_count = 0
     else
-        self.shift = self.shift and self.shift or bit.lshift(val[0], self.shift_count)
+        self.shift = self.shift and self.shift or lshift(val[0], self.shift_count)
         self.shift_count = self.shift_count + 1
         if self.shift_count == 0x05 then
-            local x = band(bit.rshift(addr, 13), 0x3)
+            local x = band(rshift(addr, 13), 0x3)
             if x == 0 then -- control
                 local nmt_mode = NMT_MODE[band(self.shift, 3)]
-                local prg_mode = PRG_MODE[band(bit.rshift(self.shift, 2), 3)]
-                local chr_mode = CHR_MODE[band(bit.rshift(self.shift, 4), 1)]
+                local prg_mode = PRG_MODE[band(rshift(self.shift, 2), 3)]
+                local chr_mode = CHR_MODE[band(rshift(self.shift, 4), 1)]
                 self:update_nmt(nmt_mode)
                 self:update_prg(prg_mode, self.prg_bank, self.chr_bank_0)
                 self:update_chr(chr_mode, self.chr_bank_0, self.chr_bank_1)

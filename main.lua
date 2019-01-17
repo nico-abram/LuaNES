@@ -74,8 +74,8 @@ function love.draw()
         local y = math.floor((i - 1) / width) % height
         local px = pxs[i]
         --[[
-        local r = bit.rshift(band(px, 0x00ff0000), 16)
-        local g = bit.rshift(band(px, 0x0000ff00), 8)
+        local r = rshift(band(px, 0x00ff0000), 16)
+        local g = rshift(band(px, 0x0000ff00), 8)
         local b = band(px, 0x000000ff)
         --]]
         --[[
