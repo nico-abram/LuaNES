@@ -925,8 +925,8 @@ function PPU:preload_tiles()
     local patt = self.bg_pattern_lut[self.bg_pattern]
     local length = #self.bg_pixels
     local idx = self.bg_pixels_idx+self.scroll_xfine
-    for i = 1, 8 do --8 do
-        self.bg_pixels[(idx + i)%length] = patt[i-1]
+    for i = 0, 7 do --8 do
+        self.bg_pixels[((idx + i)%length)+1] = patt[i]
     end
 end
 
@@ -947,8 +947,8 @@ function PPU:load_tiles()
     local patt = self.bg_pattern_lut[self.bg_pattern]
     local length = #self.bg_pixels
     local idx = self.bg_pixels_idx+self.scroll_xfine
-    for i = 1, 8 do --8 do
-        self.bg_pixels[(idx + i) % length] = patt[i-1]
+    for i = 0, 7 do --8 do
+        self.bg_pixels[((idx + i) % length) + 1] = patt[i]
     end
 end
 
@@ -1168,7 +1168,7 @@ end
 
 -- just a placeholder; used for batch_render_pixels optimization
 function PPU:batch_render_eight_pixels()
-    do return end
+    --do return end
     local pixel
     local output_color = self.output_color
     local clr = output_color[1]
