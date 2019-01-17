@@ -1,3 +1,7 @@
+band = bit.band
+bor = bit.bor
+bxor = bit.bxor
+bnot = bit.bnot
 require "libs/serpent"
 require "utils"
 NES = {}
@@ -8,6 +12,7 @@ require "ppu"
 require "apu"
 require "rom"
 require "palette"
+require "pads"
 
 UTILS:import()
 
@@ -37,17 +42,24 @@ function NES:run_once()
 
     self.frame = self.frame + 1
 end
-function NES:run()
+function NES:run(counter)
     self:reset()
-    while true do
+    if not counter then
+        while true do
+            self:run_once()
+        end
+    end
+    local acum = 0
+    while acum < counter do
         self:run_once()
+        acum = acum+1
     end
 end
 function NES:new(opts)
     opts = opts or {}
-    local conf = {romfile = opts.file, pc = opts.pc or nil, loglevel = opts.loglevel or 0}
+    local conf = {romfile = opts.file, pc = opts.pc or nil, loglevel = opts.loglevel or 0, }
     local nes = {}
-    local palette = PALETTE:defacto_palette()
+    local palette = opts.palette or PALETTE:defacto_palette()
     setmetatable(nes, NES._mt)
     nes.cpu = CPU:new(conf)
     nes.cpu.apu = APU:new(conf, nes.cpu)
@@ -81,6 +93,7 @@ function NES:new(opts)
         end
     }
     nes.rom = ROM.load(conf, nes.cpu, nes.cpu.ppu)
+    nes.pads = Pads:new(conf, nes.cpu, nes.cpu.apu)
 
     nes.frame = 0
     nes.frame_target = nil

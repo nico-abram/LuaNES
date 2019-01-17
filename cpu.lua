@@ -103,7 +103,7 @@ function CPU:peek_nop(addr)
 end
 
 function CPU:peek_jam_1(addr)
-    self._pc = bit.band(self._pc - 1, 0xffff)
+    self._pc = band(self._pc - 1, 0xffff)
     return 0xfc
 end
 function CPU:peek_jam_2(_addr)
@@ -121,6 +121,7 @@ end
 function CPU:fetch(addr)
     local getter = self._fetch[addr]
     getter = (type(getter) ~= "table" or getter ~= UNDEFINED) and getter or nil
+    --[[
     if not getter then
         printf("Error fetching %04X state:", addr)
         self:printState()
@@ -140,6 +141,7 @@ function CPU:fetch(addr)
         end
         error(string.format("Error fetching %04X", addr))
     end
+    --]]
     --print "ASD"
     --printf("%04X : %04X", addr, getter(addr))
     return getter and getter(addr) or nil
@@ -277,7 +279,7 @@ function CPU:sprite_dma(addr, sp_ram)
     end
     for i = 0, 63 do
         local j = i * 4 + 3
-        sp_ram[j] = bit.band(sp_ram[j], 0xe3)
+        sp_ram[j] = band(sp_ram[j], 0xe3)
     end
 end
 
@@ -313,9 +315,9 @@ end
 -- interrupts
 
 function CPU:clear_irq(line)
-    local old_irq_flags = bit.band(self.irq_flags, bit.bor(CPU.IRQ_FRAME, CPU.IRQ_DMC))
+    local old_irq_flags = band(self.irq_flags, bor(CPU.IRQ_FRAME, CPU.IRQ_DMC))
     self.irq_flags =
-        bit.band(bit.bxor(self.irq_flags, bit.bxor(line, bit.bor(bit.bor(CPU.IRQ_EXT, CPU.IRQ_FRAME), CPU.IRQ_DMC))))
+        band(bxor(self.irq_flags, bxor(line, bor(bor(CPU.IRQ_EXT, CPU.IRQ_FRAME), CPU.IRQ_DMC))))
     if self.irq_flags == 0 then
         self.clk_irq = CPU.FOREVER_CLOCK
     end
@@ -331,7 +333,7 @@ function CPU:next_interrupt_clock(clk)
 end
 
 function CPU:do_irq(line, clk)
-    self.irq_flags = bit.bor(self.irq_flags, line)
+    self.irq_flags = bor(self.irq_flags, line)
     if self.clk_irq == CPU.FOREVER_CLOCK and self._p_i == 0 then
         self.clk_irq = self:next_interrupt_clock(clk)
     end
@@ -378,14 +380,14 @@ end
 ------ P regeister ------
 
 function CPU:flags_pack()
-    return bit.bor(
-        bit.bor(
-            bit.bor(
-                bit.bor(
-                    bit.bor(
-                        bit.bor(
-                            bit.band(bit.bor(bit.rshift(self._p_nz, 1), self._p_nz), 0x80),
-                            (bit.band(self._p_nz, 0xff) ~= 0 and 0 or 2)
+    return bor(
+        bor(
+            bor(
+                bor(
+                    bor(
+                        bor(
+                            band(bor(bit.rshift(self._p_nz, 1), self._p_nz), 0x80),
+                            (band(self._p_nz, 0xff) ~= 0 and 0 or 2)
                         ),
                         self._p_c
                     ),
@@ -410,11 +412,11 @@ function CPU:flags_pack()
 end
 
 function CPU:flags_unpack(f)
-    self._p_nz = bit.bor(bit.band(bit.bnot(f), 2), bit.lshift(bit.band(f, 0x80), 1))
-    self._p_c = bit.band(f, 0x01)
-    self._p_v = bit.band(f, 0x40)
-    self._p_i = bit.band(f, 0x04)
-    self._p_d = bit.band(f, 0x08)
+    self._p_nz = bor(band(bnot(f), 2), bit.lshift(band(f, 0x80), 1))
+    self._p_c = band(f, 0x01)
+    self._p_v = band(f, 0x40)
+    self._p_i = band(f, 0x04)
+    self._p_d = band(f, 0x08)
 end
 
 ------ branch helper ------
@@ -422,7 +424,7 @@ function CPU:branch(cond)
     if cond then
         local tmp = self._pc + 1
         local rel = self:fetch(self._pc)
-        self._pc = bit.band(tmp + (rel < 128 and rel or bit.bor(rel, 0xff00)), 0xffff)
+        self._pc = band(tmp + (rel < 128 and rel or bor(rel, 0xff00)), 0xffff)
         self.clk = self.clk + (nthBitIsSetInt(tmp, 8) == nthBitIsSetInt(self._pc, 8) and CLK[3] or CLK[4])
     else
         self._pc = self._pc + 1
@@ -446,20 +448,20 @@ end
 ------ stack management ------
 function CPU:push8(data)
     self.ram[0x0100 + self._sp] = data
-    self._sp = bit.band((self._sp - 1), 0xff)
+    self._sp = band((self._sp - 1), 0xff)
     --printf("push8")
     --printf("%X",self._sp)
 end
 
 function CPU:push16(data)
     self:push8(bit.rshift(data, 8))
-    self:push8(bit.band(data, 0xff))
+    self:push8(band(data, 0xff))
 end
 
 function CPU:pull8()
     --printf("pull8")
     --printf("%X",self._sp)
-    self._sp = bit.band(self._sp + 1, 0xff)
+    self._sp = band(self._sp + 1, 0xff)
     --printf("%X",self._sp)
     --printf("%02X",0x0100 + self._sp)
     return self.ram[0x0100 + self._sp]
@@ -502,7 +504,7 @@ end
 
 -- zero-page indexed addressing
 function CPU:zpg_reg(indexed, read, write)
-    self.addr = bit.band(indexed + self:fetch(self._pc), 0xff)
+    self.addr = band(indexed + self:fetch(self._pc), 0xff)
     self._pc = self._pc + 1
     self.clk = self.clk + CLK[4]
     if read then
@@ -542,16 +544,16 @@ function CPU:abs_reg(indexed, read, write)
   printf("i:%02X", i)
   printf("laddr:%02X", addr)
   ]]
-    self.addr = bit.band(bit.lshift(self:fetch(addr), 8) + i, 0xffff)
+    self.addr = band(bit.lshift(self:fetch(addr), 8) + i, 0xffff)
     --printf("postaddr%02X", self.addr)
     if write then
-        addr = bit.band(self.addr - bit.band(i, 0x100), 0xffff)
+        addr = band(self.addr - band(i, 0x100), 0xffff)
         self:fetch(addr)
         self.clk = self.clk + CLK[4]
     else
         self.clk = self.clk + CLK[3]
-        if bit.band(i, 0x100) ~= 0 then
-            addr = bit.band(self.addr - 0x100, 0xffff) -- for inlining fetch
+        if band(i, 0x100) ~= 0 then
+            addr = band(self.addr - 0x100, 0xffff) -- for inlining fetch
             self:fetch(addr)
             self.clk = self.clk + CLK[1]
         end
@@ -573,7 +575,7 @@ function CPU:ind_x(read, write)
     local addr = self:fetch(self._pc) + self._x
     self._pc = self._pc + 1
     self.clk = self.clk + CLK[5]
-    self.addr = bit.bor(self.ram[bit.band(addr, 0xff)], bit.lshift(self.ram[bit.band(addr + 1, 0xff)], 8))
+    self.addr = bor(self.ram[band(addr, 0xff)], bit.lshift(self.ram[band(addr + 1, 0xff)], 8))
     return self:read_write(read, write)
 end
 
@@ -585,13 +587,13 @@ function CPU:ind_y(read, write)
     self.clk = self.clk + CLK[4]
     if write then
         self.clk = self.clk + CLK[1]
-        self.addr = bit.lshift(self.ram[bit.band(addr + 1, 0xff)], 8) + indexed
-        addr = self.addr - bit.band(indexed, 0x100) -- for inlining fetch
+        self.addr = bit.lshift(self.ram[band(addr + 1, 0xff)], 8) + indexed
+        addr = self.addr - band(indexed, 0x100) -- for inlining fetch
         self:fetch(addr)
     else
-        self.addr = bit.band(bit.lshift(self.ram[bit.band(addr + 1, 0xff)], 8) + indexed, 0xffff)
-        if bit.band(indexed, 0x100) ~= 0 then
-            addr = bit.band(self.addr - 0x100, 0xffff) -- for inlining fetch
+        self.addr = band(bit.lshift(self.ram[band(addr + 1, 0xff)], 8) + indexed, 0xffff)
+        if band(indexed, 0x100) ~= 0 then
+            addr = band(self.addr - 0x100, 0xffff) -- for inlining fetch
             self:fetch(addr)
             self.clk = self.clk + CLK[1]
         end
@@ -688,7 +690,7 @@ end
 function CPU:_jmp_i()
     local pos = self:peek16(self._pc)
     local low = self:fetch(pos)
-    pos = bit.bor(bit.band(pos, 0xff00), bit.band(pos + 1, 0x00ff))
+    pos = bor(band(pos, 0xff00), band(pos + 1, 0x00ff))
     local high = self:fetch(pos)
     self._pc = high * 256 + low
     self.clk = self.clk + CLK[5]
@@ -705,7 +707,7 @@ function CPU:_rts()
     local x = self:pull16()
     --printf("rts")
     --printf("%X04",x)
-    self._pc = bit.band(x + 1, 0xffff)
+    self._pc = band(x + 1, 0xffff)
     self.clk = self.clk + CLK[6]
 end
 
@@ -723,19 +725,19 @@ function CPU:_rti()
 end
 
 function CPU:_bne()
-    return self:branch(bit.band(self._p_nz, 0xff) ~= 0)
+    return self:branch(band(self._p_nz, 0xff) ~= 0)
 end
 
 function CPU:_beq()
-    return self:branch(bit.band(self._p_nz, 0xff) == 0)
+    return self:branch(band(self._p_nz, 0xff) == 0)
 end
 
 function CPU:_bmi()
-    return self:branch(bit.band(self._p_nz, 0x180) ~= 0)
+    return self:branch(band(self._p_nz, 0x180) ~= 0)
 end
 
 function CPU:_bpl()
-    return self:branch(bit.band(self._p_nz, 0x180) == 0)
+    return self:branch(band(self._p_nz, 0x180) == 0)
 end
 
 function CPU:_bcs()
@@ -757,99 +759,99 @@ end
 -- math operations
 function CPU:_adc()
     local tmp = self._a + self.data + self._p_c
-    self._p_v = bit.band(bit.bnot(bit.bxor(self._a, self.data)), bit.band(bit.bxor(self._a, tmp), 0x80))
-    self._a = bit.band(tmp, 0xff)
+    self._p_v = band(bnot(bxor(self._a, self.data)), band(bxor(self._a, tmp), 0x80))
+    self._a = band(tmp, 0xff)
     self._p_nz = self._a
     self._p_c = nthBitIsSetInt(tmp, 8)
 end
 
 function CPU:_sbc()
-    local data = bit.bxor(self.data, 0xff)
+    local data = bxor(self.data, 0xff)
     local tmp = self._a + data + self._p_c
-    self._p_v = bit.band(bit.bnot(bit.bxor(self._a, data)), bit.band(bit.bxor(self._a, tmp), 0x80))
-    self._a = bit.band(tmp, 0xff)
+    self._p_v = band(bnot(bxor(self._a, data)), band(bxor(self._a, tmp), 0x80))
+    self._a = band(tmp, 0xff)
     self._p_nz = self._a
     self._p_c = nthBitIsSetInt(tmp, 8)
 end
 
 -- logical operations
 function CPU:_and()
-    self._a = bit.band(self._a, self.data)
+    self._a = band(self._a, self.data)
     self._p_nz = self._a
 end
 
 function CPU:_ora()
-    self._a = bit.bor(self._a, self.data)
+    self._a = bor(self._a, self.data)
     self._p_nz = self._a
 end
 
 function CPU:_eor()
-    self._a = bit.bxor(self._a, self.data)
+    self._a = bxor(self._a, self.data)
     self._p_nz = self._a
 end
 
 function CPU:_bit()
-    self._p_nz = bit.bor((bit.band(self.data, self._a) ~= 0 and 1 or 0), bit.lshift(bit.band(self.data, 0x80), 1))
-    self._p_v = bit.band(self.data, 0x40)
+    self._p_nz = bor((band(self.data, self._a) ~= 0 and 1 or 0), bit.lshift(band(self.data, 0x80), 1))
+    self._p_v = band(self.data, 0x40)
 end
 
 function CPU:_cmp()
     local data = self._a - self.data
-    self._p_nz = bit.band(data, 0xff)
+    self._p_nz = band(data, 0xff)
     self._p_c = 1 - nthBitIsSetInt(data, 8)
 end
 
 function CPU:_cpx()
     local data = self._x - self.data
-    self._p_nz = bit.band(data, 0xff)
+    self._p_nz = band(data, 0xff)
     self._p_c = 1 - nthBitIsSetInt(data, 8)
 end
 
 function CPU:_cpy()
     local data = self._y - self.data
-    self._p_nz = bit.band(data, 0xff)
+    self._p_nz = band(data, 0xff)
     self._p_c = 1 - nthBitIsSetInt(data, 8)
 end
 
 -- shift operations
 function CPU:_asl()
     self._p_c = bit.rshift(self.data, 7)
-    self._p_nz = bit.band(bit.lshift(self.data, 1), 0xff)
+    self._p_nz = band(bit.lshift(self.data, 1), 0xff)
     self.data = self._p_nz
 end
 
 function CPU:_lsr()
-    self._p_c = bit.band(self.data, 1)
+    self._p_c = band(self.data, 1)
     self._p_nz = bit.rshift(self.data, 1)
     self.data = self._p_nz
 end
 
 function CPU:_rol()
-    self._p_nz = bit.bor(bit.band(bit.lshift(self.data, 1), 0xff), self._p_c)
+    self._p_nz = bor(band(bit.lshift(self.data, 1), 0xff), self._p_c)
     self._p_c = bit.rshift(self.data, 7)
     self.data = self._p_nz
 end
 
 function CPU:_ror()
-    self._p_nz = bit.bor(bit.rshift(self.data, 1), bit.lshift(self._p_c, 7))
-    self._p_c = bit.band(self.data, 1)
+    self._p_nz = bor(bit.rshift(self.data, 1), bit.lshift(self._p_c, 7))
+    self._p_c = band(self.data, 1)
     self.data = self._p_nz
 end
 
 -- increment and decrement operations
 function CPU:_dec()
-    self._p_nz = bit.band(self.data - 1, 0xff)
+    self._p_nz = band(self.data - 1, 0xff)
     self.data = self._p_nz
 end
 
 function CPU:_inc()
-    self._p_nz = bit.band(self.data + 1, 0xff)
+    self._p_nz = band(self.data + 1, 0xff)
     self.data = self._p_nz
 end
 
 function CPU:_dex()
     self.clk = self.clk + CLK[2]
-    local x = bit.band(self._x - 1, 0xff)
+    local x = band(self._x - 1, 0xff)
     self.data = x
     self._p_nz = x
     self._x = x
@@ -857,21 +859,21 @@ end
 
 function CPU:_dey()
     self.clk = self.clk + CLK[2]
-    self._y = bit.band(self._y - 1, 0xff)
+    self._y = band(self._y - 1, 0xff)
     self.data = self._y
     self._p_nz = self._y
 end
 
 function CPU:_inx()
     self.clk = self.clk + CLK[2]
-    self._x = bit.band(self._x + 1, 0xff)
+    self._x = band(self._x + 1, 0xff)
     self.data = self._x
     self._p_nz = self._x
 end
 
 function CPU:_iny()
     self.clk = self.clk + CLK[2]
-    self._y = bit.band(self._y + 1, 0xff)
+    self._y = band(self._y + 1, 0xff)
     self.data = self._y
     self._p_nz = self._y
 end
@@ -934,7 +936,7 @@ end
 
 function CPU:_php()
     self.clk = self.clk + CLK[3]
-    local data = bit.bor(self:flags_pack(), 0x10)
+    local data = bor(self:flags_pack(), 0x10)
     return self:push8(data)
 end
 
@@ -977,41 +979,41 @@ end
 
 -- undocumented instructions, rarely used
 function CPU:_anc()
-    self._a = bit.band(self._a, self.data)
+    self._a = band(self._a, self.data)
     self._p_nz = self._a
     self._p_c = bit.rshift(self._p_nz, 7)
 end
 
 function CPU:_ane()
-    self._a = bit.band(bit.band(bit.bor(self._a, 0xee), self._x), self.data)
+    self._a = band(band(bor(self._a, 0xee), self._x), self.data)
     self._p_nz = self._a
 end
 
 function CPU:_arr()
-    self._a = bit.bor(bit.rshift(bit.band(self.data, self._a), 1), bit.lshift(self._p_c, 7))
+    self._a = bor(bit.rshift(band(self.data, self._a), 1), bit.lshift(self._p_c, 7))
     self._p_nz = self._a
     self._p_c = nthBitIsSetInt(self._a, 6)
-    self._p_v = bit.bxor(nthBitIsSetInt(self._a, 6), nthBitIsSetInt(self._a, 5))
+    self._p_v = bxor(nthBitIsSetInt(self._a, 6), nthBitIsSetInt(self._a, 5))
 end
 
 function CPU:_asr()
-    self._p_c = bit.band(bit.band(self.data, self._a), 0x1)
-    self._a = bit.rshift(bit.band(self.data, self._a), 1)
+    self._p_c = band(band(self.data, self._a), 0x1)
+    self._a = bit.rshift(band(self.data, self._a), 1)
     self._p_nz = self._a
 end
 
 function CPU:_dcp()
-    self.data = bit.band(self.data - 1, 0xff)
+    self.data = band(self.data - 1, 0xff)
     return self:_cmp()
 end
 
 function CPU:_isb()
-    self.data = bit.band(self.data + 1, 0xff)
+    self.data = band(self.data + 1, 0xff)
     return self:_sbc()
 end
 
 function CPU:_las()
-    self._sp = bit.band(self._sp, self.data)
+    self._sp = band(self._sp, self.data)
     --printf("las")
     --printf("%X04",self._sp)
     self._x = self._sp
@@ -1034,8 +1036,8 @@ end
 function CPU:_rla()
     local c = self._p_c
     self._p_c = bit.rshift(self.data, 7)
-    self.data = bit.bor(bit.band(bit.lshift(self.data, 1), 0xff), c)
-    self._a = bit.band(self._a, self.data)
+    self.data = bor(band(bit.lshift(self.data, 1), 0xff), c)
+    self._a = band(self._a, self.data)
     self._p_nz = self._a
 end
 
@@ -1046,8 +1048,8 @@ function CPU:_rra()
       local pc = self._p_c
       self.addr = p
       local c = bit.lshift(self._p_c ,7)
-      self._p_c = bit.band(self.data , 1)
-      self.data = bit.bor(bit.rshift(self.data ,1), c)
+      self._p_c = band(self.data , 1)
+      self.data = bor(bit.rshift(self.data ,1), c)
       printf("%02X", self.addr)
       printf("%02X", self:fetch(self.addr))
       printf("%02X", c)
@@ -1058,8 +1060,8 @@ function CPU:_rra()
       self._p_c = p
       ]]
     local c = bit.lshift(self._p_c, 7)
-    self._p_c = bit.band(self.data, 1)
-    self.data = bit.bor(bit.rshift(self.data, 1), c)
+    self._p_c = band(self.data, 1)
+    self.data = bor(bit.rshift(self.data, 1), c)
     --[[
       printf("%02X", self.addr)
       printf("%02X", self.addr)
@@ -1073,48 +1075,48 @@ function CPU:_rra()
 end
 
 function CPU:_sax()
-    self.data = bit.band(self._a, self._x)
+    self.data = band(self._a, self._x)
 end
 
 function CPU:_sbx()
-    self.data = bit.band(self._a, self._x) - self.data
-    self._p_c = bit.band(self.data, 0xffff) <= 0xff and 1 or 0
-    self._x = bit.band(self.data, 0xff)
+    self.data = band(self._a, self._x) - self.data
+    self._p_c = band(self.data, 0xffff) <= 0xff and 1 or 0
+    self._x = band(self.data, 0xff)
     self._p_nz = self._x
 end
 
 function CPU:_sha()
-    self.data = bit.band(self._a, bit.band(self._x, (bit.rshift(self.addr, 8) + 1)))
+    self.data = band(self._a, band(self._x, (bit.rshift(self.addr, 8) + 1)))
 end
 
 function CPU:_shs()
-    self._sp = bit.band(self._a, self._x)
+    self._sp = band(self._a, self._x)
     --printf("shs")
     --printf("%X04",self._sp)
-    self.data = bit.band(self._sp, (bit.rshift(self.addr, 8) + 1))
+    self.data = band(self._sp, (bit.rshift(self.addr, 8) + 1))
 end
 
 function CPU:_shx()
-    self.data = bit.band(self._x, (bit.rshift(self.addr, 8) + 1))
-    self.addr = bit.bor(bit.lshift(self.data, 8), bit.band(self.addr, 0xff))
+    self.data = band(self._x, (bit.rshift(self.addr, 8) + 1))
+    self.addr = bor(bit.lshift(self.data, 8), band(self.addr, 0xff))
 end
 
 function CPU:_shy()
-    self.data = bit.band(self._y, (bit.rshift(self.addr, 8) + 1))
-    self.addr = bit.bor(bit.lshift(self.data, 8), bit.band(self.addr, 0xff))
+    self.data = band(self._y, (bit.rshift(self.addr, 8) + 1))
+    self.addr = bor(bit.lshift(self.data, 8), band(self.addr, 0xff))
 end
 
 function CPU:_slo()
     self._p_c = bit.rshift(self.data, 7)
-    self.data = bit.band(bit.lshift(self.data, 1), 0xff)
-    self._a = bit.bor(self.data, self._a)
+    self.data = band(bit.lshift(self.data, 1), 0xff)
+    self._a = bor(self.data, self._a)
     self._p_nz = self._a
 end
 
 function CPU:_sre()
-    self._p_c = bit.band(self.data, 1)
+    self._p_c = band(self.data, 1)
     self.data = bit.rshift(self.data, 1)
-    self._a = bit.bxor(self._a, self.data)
+    self._a = bxor(self._a, self.data)
     self._p_nz = self._a
 end
 
@@ -1126,7 +1128,7 @@ end
 function CPU:_brk()
     local data = self._pc + 1
     self:push16(data)
-    data = bit.bor(self:flags_pack(), 0x10)
+    data = bor(self:flags_pack(), 0x10)
     self:push8(data)
     self._p_i = 0x04
     self.clk_irq = CPU.FOREVER_CLOCK
@@ -1136,7 +1138,7 @@ function CPU:_brk()
 end
 
 function CPU:_jam()
-    self._pc = bit.band((self._pc - 1), 0xffff)
+    self._pc = band((self._pc - 1), 0xffff)
     self.clk = self.clk + CLK[2]
     if not self.jammed then
         self.jammed = true
@@ -1265,13 +1267,13 @@ end
 local asd = 0
 function CPU:run_once()
     self.opcode = self:fetch(self._pc)
-    --if self.conf.loglevel >= 3 then
-    self:printState(true)
+    if self.conf.loglevel >= 3 then
+        self:printState(true)
     --[[
             self.conf.debug(string.format("PC:%04X A:%02X X:%02X Y:%02X P:%02X SP:%02X CYC:%3d : OPCODE:%02X (%d, %d)" ,
               self._pc, self._a, self._x, self._y, self:flags_pack(), self._sp, self.clk / 4 % 341, self.opcode, self.cl
             ))]]
-    --end
+    end
 
     self._pc = self._pc + 1
 
@@ -1287,9 +1289,11 @@ function CPU:run_once()
     end
     --print(self.clk)
     asd = asd + 1
-    if asd > 3500000 then
+    if asd > 350000000 then
+        if asdasdsssasd then
         asdasdsssasd:flush()
         asdasdsssasd:close()
+        end
         error "asd"
     end
 end
@@ -1336,7 +1340,7 @@ local function op(opcodes, args)
         if type(args) == "table" then
             if (args[1] == "r_op" or args[1] == "w_op" or args[1] == "rw_op") then
                 local kind, ope, addrmode = args[1], args[2], args[3]
-                addrmode = CPU.ADDRESSING_MODES[addrmode][bit.band(bit.rshift(opcode, 2), 7) + 1]
+                addrmode = CPU.ADDRESSING_MODES[addrmode][band(bit.rshift(opcode, 2), 7) + 1]
                 send_args = {kind, ope, addrmode}
                 if kind ~= "r_op" then
                     send_args[#send_args + 1] = (addrmode:sub(1, 3) == "zpg" and "store_zpg" or "store_mem")

@@ -43,6 +43,42 @@ function UTILS.fill(t, v, n, step, offs)
     return t
 end
 
+function UTILS.shiftingArray()
+    local _t = {}
+    local t = {}
+    local shift = 0
+    setmetatable(t, {
+      __index = function (t,k)
+        return _t[UTILS.rotateIdx(_t,k+shift)]
+      end,
+      __newindex = function (t,k,v)
+        if k > #_t then
+            table.insert(_t, shift + k - #_t - 1, v)
+        else
+         _t[UTILS.rotateIdx(_t,k+shift)] = v
+        end
+      end})
+      t.rotate = function(self, newshift)
+        shift = UTILS.rotateIdx(_t,newshift + shift)
+      end
+    return t
+end
+
+function UTILS.indexRotating(t, idx)
+    return t[UTILS.rotateIdx(t,idx)]
+end
+
+function UTILS.rotateIdx(t, idx, size)
+    size = size or #t
+    if idx > size then
+        return UTILS.rotateIdx(t,idx-size, size)
+    elseif idx < 1 then
+        return UTILS.rotateIdx(t, idx+size, size)
+    else
+        return idx
+    end
+end
+
 -- In-place
 function UTILS.rotate( array, shift ) -- Works for array with consecutive entries
     shift = shift or 1 -- make second arg optional, defaults to 1
@@ -89,7 +125,7 @@ function UTILS.rotateNew(t, r)
     return rotated
 end
 function UTILS.nthBitIsSet(n, nth)
-    return bit.band(n, bit.lshift(0x1, nth)) ~= 0
+    return band(n, bit.lshift(0x1, nth)) ~= 0
 end
 function UTILS.nthBitIsSetInt(n, nth)
     return UTILS.nthBitIsSet(n, nth) and 1 or 0

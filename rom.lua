@@ -170,7 +170,7 @@ function ROM.load(conf, cpu, ppu)
     for i = 1, str:len() do
         blob[i] = str:byte(i, i)
     end
-    local mapper = bit.bor(bit.rshift(blob[7], 4), bit.band(blob[8], 0xf0))
+    local mapper = bor(bit.rshift(blob[7], 4), band(blob[8], 0xf0))
 
     --print "amper"
     --print(mapper)
@@ -193,7 +193,7 @@ function ROM:parse_header(buf, str)
         prg_pages = buf[5],
         chr_pages = buf[6],
         battery = nthBitIsSet(buf[7], 1),
-        mapper = bit.bor(bit.rshift(buf[7], 4), bit.band(buf[8], 0xf0)),
+        mapper = bor(bit.rshift(buf[7], 4), band(buf[8], 0xf0)),
         mapping = not nthBitIsSet(buf[7], 0) and "horizontal" or "vertical"
     }
     if header.check ~= "NES\x1a" then
@@ -216,7 +216,7 @@ function ROM:parse_header(buf, str)
         self.mirroring = "four_screen"
     end
     self.battery = nthBitIsSet(buf[7], 1)
-    self.mapper = bit.bor(bit.rshift(buf[7], 4), bit.band(buf[8], 0xf0))
+    self.mapper = bor(bit.rshift(buf[7], 4), band(buf[8], 0xf0))
     local ram_banks = math.max(1, buf[9])
 
     return prg_banks, chr_banks, ram_banks
@@ -235,7 +235,7 @@ function UxROM:reset()
 end
 
 function UxROM:poke_8000(_addr, data)
-    local j = bit.band(data, 7)
+    local j = band(data, 7)
     for i = 0x8000 + 1, 0x4000 do
         self.prg_ref[i] = self.prg_banks[j][i - 0x8000]
     end
@@ -259,7 +259,7 @@ function CNROM:reset()
 end
 
 function CNROM:poke_8000(_addr, data)
-    local j = bit.band(data, 3)
+    local j = band(data, 3)
     self.chr_ref = {unpack(self.chr_banks[j])}
 end
 ROM.MAPPER_DB[0x03] = CNROM
@@ -310,11 +310,11 @@ function MMC1:poke_prg(addr, val)
         self.shift = self.shift and self.shift or bit.lshift(val[0], self.shift_count)
         self.shift_count = self.shift_count + 1
         if self.shift_count == 0x05 then
-            local x = bit.band(bit.rshift(addr, 13), 0x3)
+            local x = band(bit.rshift(addr, 13), 0x3)
             if x == 0 then -- control
-                local nmt_mode = NMT_MODE[bit.band(self.shift, 3)]
-                local prg_mode = PRG_MODE[bit.band(bit.rshift(self.shift, 2), 3)]
-                local chr_mode = CHR_MODE[bit.band(bit.rshift(self.shift, 4), 1)]
+                local nmt_mode = NMT_MODE[band(self.shift, 3)]
+                local prg_mode = PRG_MODE[band(bit.rshift(self.shift, 2), 3)]
+                local chr_mode = CHR_MODE[band(bit.rshift(self.shift, 4), 1)]
                 self:update_nmt(nmt_mode)
                 self:update_prg(prg_mode, self.prg_bank, self.chr_bank_0)
                 self:update_chr(chr_mode, self.chr_bank_0, self.chr_bank_1)
@@ -350,12 +350,12 @@ function MMC1:update_prg(prg_mode, prg_bank, chr_bank_0)
     end
     self.prg_mode, self.prg_bank, self.chr_bank_0 = prg_mode, prg_bank, chr_bank_0
 
-    local high_bit = bit.band(chr_bank_0, bit.band(0x10, (self.prg_banks.size - 1)))
-    local prg_bank_ex = bit.band(bit.bor(bit.band(self.prg_bank, 0x0f), high_bit), (self.prg_banks.size - 1))
+    local high_bit = band(chr_bank_0, band(0x10, (self.prg_banks.size - 1)))
+    local prg_bank_ex = band(bor(band(self.prg_bank, 0x0f), high_bit), (self.prg_banks.size - 1))
     local lower
     local upper
     if self.prg_mode == "conseq" then
-        lower = bit.band(prg_bank_ex, bit.bnot(1))
+        lower = band(prg_bank_ex, bnot(1))
         upper = lower + 1
     elseif self.prg_mode == "fix_first" then
         --elseif self.prg_mode == "fix_last" then
@@ -363,7 +363,7 @@ function MMC1:update_prg(prg_mode, prg_bank, chr_bank_0)
         upper = prg_bank_ex
     else
         lower = prg_bank_ex
-        upper = bit.bor(bit.band(self.prg_banks.size - 1, 0x0f), high_bit)
+        upper = bor(band(self.prg_banks.size - 1, 0x0f), high_bit)
     end
     for i = 0x8000 + 1, 0x8000 + 0x4000 + 1 do
         self.prg_ref[i] = self.prg_banks[lower][i - 0x8000]
@@ -385,7 +385,7 @@ function MMC1:update_chr(chr_mode, chr_bank_0, chr_bank_1)
     local upper
     self.ppu:update(0)
     if self.chr_mode == "conseq" then
-        lower = bit.band(self.chr_bank_0, 0x1e)
+        lower = band(self.chr_bank_0, 0x1e)
         upper = lower + 1
     else
         lower = self.chr_bank_0
@@ -467,7 +467,7 @@ end
 function MMC3:update_prg(addr, bank)
     bank = bank % self.prg_banks.size
     if self.prg_bank_swap and addr[13] == 0 then
-        addr = bit.bxor(addr, 0x4000)
+        addr = bxor(addr, 0x4000)
     end
     for i = addr + 1, addr + 0x2000 + 1 do
         self.prg_ref[i] = self.prg_banks[bank][i - addr]
@@ -484,7 +484,7 @@ function MMC3:update_chr(addr, bank)
         return
     end
     if self.chr_bank_swap then
-        addr = bit.bxor(addr, 0x1000)
+        addr = bxor(addr, 0x1000)
     end
     self.ppu:update(0)
     for i = addr + 1, addr + 0x400 + 1 do
@@ -494,7 +494,7 @@ function MMC3:update_chr(addr, bank)
 end
 
 function MMC3:poke_8000(_addr, data)
-    self.reg_select = bit.band(data, 7)
+    self.reg_select = band(data, 7)
     local prg_bank_swap = data[6] == 1
     local chr_bank_swap = data[7] == 1
 
@@ -522,13 +522,13 @@ end
 function MMC3:poke_8001(_addr, data)
     if self.reg_select < 6 then
         if self.reg_select < 2 then
-            self:update_chr(self.reg_select * 0x0800, bit.band(data, 0xfe))
-            self:update_chr(self.reg_select * 0x0800 + 0x0400, bit.bor(data, 0x01))
+            self:update_chr(self.reg_select * 0x0800, band(data, 0xfe))
+            self:update_chr(self.reg_select * 0x0800 + 0x0400, bor(data, 0x01))
         else
             self:update_chr((self.reg_select - 2) * 0x0400 + 0x1000, data)
         end
     else
-        self:update_prg((self.reg_select - 6) * 0x2000 + 0x8000, bit.band(data, 0x3f))
+        self:update_prg((self.reg_select - 6) * 0x2000 + 0x8000, band(data, 0x3f))
     end
 end
 

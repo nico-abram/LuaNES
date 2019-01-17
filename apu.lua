@@ -79,6 +79,7 @@ function APU:initialize(conf, cpu, rate, bits)
   self.dmc_clock = 0
 
   self:reset(false)
+  return self
 end
 
 function APU:reset_mapping()
@@ -250,7 +251,7 @@ function APU:clock_dmc(target)
 end
 function APU:clock_frame_counter()
   self:clock_oscillators(nthBitIsSetInt(self.frame_divider, 0) == 1)
-  self.frame_divider = bit.band((self.frame_divider + 1), 3)
+  self.frame_divider = band((self.frame_divider + 1), 3)
   self.frame_counter = self.frame_counter + self.oscillator_clocks[self.frame_divider + 1] * self.fixed_clock
 end
 
@@ -314,7 +315,7 @@ function APU:peek_4015(_addr)
   if self.frame_counter < elapsed * self.fixed_clock then
     self:update(elapsed)
   end
-  return bit.bor(
+  return bor(
     self.cpu.clear_irq(CPU.IRQ_FRAME),
     (self.pulse_0.status and 0x01 or 0),
     (self.pulse_1.status and 0x02 or 0),
@@ -335,15 +336,15 @@ function APU:poke_4017(_addr, data)
     clock_frame_irq(n)
   end
   n = n + CPU.CLK[1]
-  self.oscillator_clocks = APU.OSCILLATOR_CLOCKS[data[7] + 1]
+  self.oscillator_clocks = APU.OSCILLATOR_CLOCKS[nthBitIsSetInt( data,7) + 1]
   self.frame_counter = (n + self.oscillator_clocks[1]) * self.fixed_clock
   self.frame_divider = 0
-  self.frame_irq_clock = (bit.band(data, 0xc0) ~= 0) and CPU.FOREVER_CLOCK or (n + APU.FRAME_CLOCKS[1])
+  self.frame_irq_clock = (band(data, 0xc0) ~= 0) and CPU.FOREVER_CLOCK or (n + APU.FRAME_CLOCKS[1])
   self.frame_irq_repeat = 0
-  if data[6] ~= 0 then
-    self.cpu.clear_irq(CPU.IRQ_FRAME)
+  if nthBitIsSetInt( data,6) ~= 0 then
+    self.cpu:clear_irq(CPU.IRQ_FRAME)
   end
-  if data[7] ~= 0 then
+  if nthBitIsSetInt( data,7) ~= 0 then
     self:clock_oscillators(true)
   end
 end
@@ -440,7 +441,7 @@ function Envelope:clock()
       return
     end
     if self.volume ~= 0 or self.looping then
-      self.volume = bit.band((self.volume - 1), 0x0f)
+      self.volume = band((self.volume - 1), 0x0f)
     end
   end
   self.count = self.volume_base
@@ -448,7 +449,7 @@ function Envelope:clock()
 end
 
 function Envelope:write(data)
-  self.volume_base = bit.band(data, 0x0f)
+  self.volume_base = band(data, 0x0f)
   self.constant = nthBitIsSetInt(data, 4) == 1
   self.looping = nthBitIsSetInt(data, 5) == 1
   return self:update_output()
@@ -549,7 +550,7 @@ end
 function Oscillator:poke_2(_addr, data)
   self.apu:update()
   if self.wave_length then
-    self.wave_length = bit.bor(bit.band(self.wave_length, 0x0700), bit.band(data, 0x00ff))
+    self.wave_length = bor(band(self.wave_length, 0x0700), band(data, 0x00ff))
     self:update_freq()
   end
 end
@@ -557,7 +558,7 @@ end
 function Oscillator:poke_3(_addr, data)
   local delta = self.apu:update_delta()
   if self.wave_length then
-    self.wave_length = bit.bor(bit.band(self.wave_length, 0x00ff), bit.lshift(bit.band(data, 0x07), 8))
+    self.wave_length = bor(band(self.wave_length, 0x00ff), bit.lshift(band(data, 0x07), 8))
     self:update_freq()
   end
   if self.envelope then
@@ -633,7 +634,7 @@ end
 function Pulse:update_freq()
   if
     self.wave_length >= Pulse.MIN_FREQ and
-      self.wave_length + bit.band(self.sweep_increase, bit.rshift(self.wave_length, self.sweep_shift)) <= Pulse.MAX_FREQ
+      self.wave_length + band(self.sweep_increase, bit.rshift(self.wave_length, self.sweep_shift)) <= Pulse.MAX_FREQ
    then
     self.freq = (self.wave_length + 1) * 2 * self.fixed
     self.valid_freq = true
@@ -644,24 +645,24 @@ function Pulse:update_freq()
 end
 
 function Pulse:poke_0(_addr, data)
-  self._parent.poke_0(self)
-  self.form = Pulse.WAVE_FORM[bit.band(bit.rshift(data, 6), 3)]
+  self._parent:poke_0(self)
+  self.form = Pulse.WAVE_FORM[band(bit.rshift(data, 6), 3)]
 end
 
 function Pulse:poke_1(_addr, data)
   self.apu:update()
-  self.sweep_increase = data[3] ~= 0 and 0 or -1
-  self.sweep_shift = bit.band(data, 0x07)
+  self.sweep_increase = nthBitIsSetInt( data,3) ~= 0 and 0 or -1
+  self.sweep_shift = band(data, 0x07)
   self.sweep_rate = 0
-  if data[7] == 1 and self.sweep_shift > 0 then
-    self.sweep_rate = bit.band(bit.rshift(data, 4), 0x07) + 1
+  if nthBitIsSetInt( data,7) == 1 and self.sweep_shift > 0 then
+    self.sweep_rate = band(bit.rshift(data, 4), 0x07) + 1
     self.sweep_reload = true
   end
   return self:update_freq()
 end
 
-function Pulse:poke_3(_addr, _data)
-  self._parent.poke_3(self)
+function Pulse:poke_3(_addr, data)
+  self._parent.poke_3(self, _addr, data)
   self.step = 0
 end
 
@@ -704,7 +705,7 @@ function Pulse:sample()
         if v > self.freq then
           v = self.freq
         end
-        self.step = bit.band((self.step + 1), 7)
+        self.step = band((self.step + 1), 7)
         sum = sum + bit.rshift(v, self.form[self.step])
         self.timer = self.timer + self.freq
       until not (self.timer < 0)
@@ -715,7 +716,7 @@ function Pulse:sample()
   else
     if self.timer < 0 then
       count = (-self.timer + self.freq - 1) / self.freq
-      self.step = bit.band((self.step + count), 7)
+      self.step = band((self.step + count), 7)
       self.timer = self.timer + count * self.freq
     end
     if self.amp < APU.CHANNEL_OUTPUT_DECAY then
@@ -756,14 +757,14 @@ function Triangle:update_freq()
 end
 
 function Triangle:poke_0(_addr, data)
-  self._parent.poke_0(self)
+  self._parent.poke_0(self, _addr, data)
   self.apu:update()
-  self.linear_counter_load = bit.band(data, 0x7f)
+  self.linear_counter_load = band(data, 0x7f)
   self.linear_counter_start = nthBitIsSetInt(data, 7) == 0
 end
 
-function Triangle:poke_3(_addr, _data)
-  self._parent.poke_3(self)
+function Triangle:poke_3(_addr, data)
+  self._parent.poke_3(self, _addr, data)
   self.status = "reload"
 end
 
@@ -798,7 +799,7 @@ function Triangle:sample()
         if v > self.freq then
           v = self.freq
         end
-        self.step = bit.band((self.step + 1), 0x1f)
+        self.step = band((self.step + 1), 0x1f)
         sum = sum + v * WAVE_FORM[self.step]
         self.timer = self.timer + self.freq
       until not (self.timer < 0)
@@ -848,8 +849,8 @@ end
 
 function Noise:poke_2(_addr, data)
   self.apu:update()
-  self.freq = Noise.LUT[bit.band(data, 0x0f) + 1] * self.fixed
-  self.shifter = data[7] ~= 0 and Noise.NEXT_BITS_6 or Noise.NEXT_BITS_1
+  self.freq = Noise.LUT[band(data, 0x0f) + 1] * self.fixed
+  self.shifter = nthBitIsSetInt( data,7) ~= 0 and Noise.NEXT_BITS_6 or Noise.NEXT_BITS_1
 end
 
 function Noise:clock_length_counter()
@@ -949,8 +950,8 @@ function DMC:sample()
 end
 
 function DMC:do_dma()
-  self.dma_buffer = self.cpu.dmc_dma(self.dma_address)
-  self.dma_address = bit.bor(0x8000, bit.band((self.dma_address + 1), 0x7fff))
+  self.dma_buffer = self.cpu:dmc_dma(self.dma_address)
+  self.dma_address = bor(0x8000, band((self.dma_address + 1), 0x7fff))
   self.dma_buffered = true
   self.dma_length_counter = self.dma_length_counter - 1
   if self.dma_length_counter == 0 then
@@ -958,7 +959,7 @@ function DMC:do_dma()
       self.dma_address = self.regs_address
       self.dma_length_counter = self.regs_length_counter
     elseif self.irq_enable then
-      self.cpu.do_irq(CPU.IRQ_DMC, self.cpu.current_clock)
+      self.cpu:do_irq(CPU.IRQ_DMC, self.cpu:current_clock())
     end
   end
 end
@@ -970,7 +971,7 @@ end
 function DMC:poke_0(_addr, data)
   self.loop = nthBitIsSetInt(data, 6) ~= 0
   self.irq_enable = nthBitIsSetInt(data, 7) ~= 0
-  self.freq = DMC.LUT[bit.band(data, 0x0f) + 1]
+  self.freq = DMC.LUT[band(data, 0x0f) + 1]
   if not self.irq_enable then
     self.cpu:clear_irq(CPU.IRQ_DMC)
   end
@@ -978,12 +979,12 @@ end
 
 function DMC:poke_1(_addr, data)
   self.apu:update()
-  self.out_dac = bit.band(data, 0x7f)
+  self.out_dac = band(data, 0x7f)
   self:update()
 end
 
 function DMC:poke_2(_addr, data)
-  self.regs_address = bit.bor(0xc000, bit.lshift(data, 6))
+  self.regs_address = bor(0xc000, bit.lshift(data, 6))
 end
 
 function DMC:poke_3(_addr, data)
@@ -992,7 +993,7 @@ end
 
 function DMC:clock_dac()
   if self.out_active then
-    n = self.out_dac + bit.lshift(bit.band(self.out_buffer, 1), 2) - 2
+    n = self.out_dac + bit.lshift(band(self.out_buffer, 1), 2) - 2
     self.out_buffer = bit.rshift(self.out_buffer, 1)
     if 0 <= n and n <= 0x7f and n ~= self.out_dac then
       self.out_dac = n
