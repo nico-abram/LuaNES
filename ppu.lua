@@ -1,3 +1,5 @@
+local ffi = require("ffi")
+
 PPU = {}
 local PPU = PPU
 PPU._mt = {__index = PPU}
@@ -102,10 +104,26 @@ function PPU:initialize(conf, cpu, palette)
     )
 
     --self.output_pixels = {}
-    self.output_pixels = fill({}, self.palette[16], PPU.SCREEN_HEIGHT * PPU.SCREEN_WIDTH)
-
+    local pixels = PPU.SCREEN_HEIGHT * PPU.SCREEN_WIDTH
+    local clr = self.palette[16]
+    self.output_pixels = ffi.new(ffi.typeof("double[$][4]", pixels))
+    for i = 1, pixels do
+        self.output_pixels[i][1] = clr[1]
+        self.output_pixels[i][2] = clr[2]
+        self.output_pixels[i][3] = clr[3]
+    end
     self.output_pixels_size = 0
-    self.output_color = fill({}, {self.palette[1]}, 0x20) -- palette size is 0x20
+    --self.output_pixels = fill({}, clr, pixels)
+
+    --self.output_color = fill({}, {self.palette[1]}, 0x20) -- palette size is 0x20
+    local clr = self.palette[1]
+    self.output_color = ffi.new(ffi.typeof("double[$][4]", 0x20 + 1))
+    for i = 1, 0x20 do
+        local a = self.output_color[i]
+        a[1] = clr[1]
+        a[2] = clr[2]
+        a[3] = clr[3]
+    end
     self:reset(true)
     self:setup_lut()
 end
@@ -257,7 +275,15 @@ end
 function PPU:update_output_color()
     for i = 1, 0x20 do
         local idx = bor(band(self.palette_ram[i], self.coloring), self.emphasis)
-        self.output_color[i] = self.palette[idx]
+        local a = self.output_color[i]
+        local b = self.palette[idx]
+        if b then
+            a[1] = b[1]
+            a[2] = b[2]
+            a[3] = b[3]
+        else
+            a[0] = 1
+        end
     end
 end
 
@@ -380,8 +406,12 @@ function PPU:update(data_setup)
 end
 
 function PPU:setup_frame()
+    local b = self.palette[16]
     for i = 1, PPU.SCREEN_HEIGHT * PPU.SCREEN_WIDTH do
-        self.output_pixels[i] = self.palette[16]
+        local a = self.output_pixels[i]
+        a[1] = b[1]
+        a[2] = b[2]
+        a[3] = b[3]
     end
     self.output_pixels_size = 0
     self.odd_frame = not self.odd_frame
@@ -642,11 +672,17 @@ function PPU:poke_2007(_addr, data)
         addr = band(addr, 0x1f)
         local final = self.palette[1 + bor(band(data, self.coloring), self.emphasis)]
         self.palette_ram[addr + 1] = data
-        self.output_color[addr + 1] = final
+        local a = self.output_color[addr + 1]
+        a[1] = final[1]
+        a[2] = final[2]
+        a[3] = final[3]
         if band(addr, 3) == 0 then
             local addr = bxor(addr, 0x10) + 1
             self.palette_ram[addr] = data
-            self.output_color[addr] = final
+            local a = self.output_color[addr]
+            a[1] = final[1]
+            a[2] = final[2]
+            a[3] = final[3]
         end
         self.output_bg_color = band(self.palette_ram[1], 0x3f)
     else
@@ -1149,10 +1185,11 @@ function PPU:render_pixel()
     if not self.any_show then
         self:set_bg_pxs(self.hclk % 8 + 1, 0)
         local px = self.output_color[band(self.scroll_addr_5_14, 0x3f00) == 0x3f00 and self.scroll_addr_0_4 or 0]
-        if px then
-            self.output_pixels_size = self.output_pixels_size + 1
-            self.output_pixels[self.output_pixels_size] = px
-        end
+        self.output_pixels_size = self.output_pixels_size + 1
+        local a = self.output_pixels[self.output_pixels_size]
+        a[1] = px[1]
+        a[2] = px[2]
+        a[3] = px[3]
     end
 end
 
@@ -1182,13 +1219,19 @@ function PPU:batch_render_eight_pixels()
                         end
                     end
                     px = output_color[1 + px]
-                    self.output_pixels[self.output_pixels_size + i] = px or clr
+                    local a = self.output_pixels[self.output_pixels_size + i]
+                    a[1] = px[1]
+                    a[2] = px[2]
+                    a[3] = px[3]
                 end
             else
                 for i = 1, 8 do
                     local sprite = self.sp_map[self.hclk + i - 1]
                     local px = output_color[sprite and (sprite[2] + 1) or 1]
-                    self.output_pixels[self.output_pixels_size + i] = px or clr
+                    local a = self.output_pixels[self.output_pixels_size + i]
+                    a[1] = px[1]
+                    a[2] = px[2]
+                    a[3] = px[3]
                 end
             end
         else
@@ -1196,11 +1239,17 @@ function PPU:batch_render_eight_pixels()
                 for i = 1, 8 do
                     local v = self:index_bg_pxs((self.hclk % 8) + i)
                     local px = output_color[1 + v]
-                    self.output_pixels[self.output_pixels_size + i] = px or clr
+                    local a = self.output_pixels[self.output_pixels_size + i]
+                    a[1] = px[1]
+                    a[2] = px[2]
+                    a[3] = px[3]
                 end
             else
                 for i = 1, 8 do
-                    self.output_pixels[self.output_pixels_size + i] = clr
+                    local a = self.output_pixels[self.output_pixels_size + i]
+                    a[1] = clr[1]
+                    a[2] = clr[2]
+                    a[3] = clr[3]
                 end
             end
         end
