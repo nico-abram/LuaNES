@@ -209,7 +209,6 @@ function PPU:reset(mapping)
     self.bg_show_edge = false
     self.bg_pixels = fill({}, 0, 16)
     self.bg_pixels_idx = 0
-    self.bg_pixels_size = 16
     self.bg_pattern_base = 0 -- == 0 or 0x1000
     self.bg_pattern_base_15 = 0 -- == self.bg_pattern_base[12] << 15
     self.bg_pattern = 0
@@ -611,7 +610,7 @@ function PPU:poke_2005(_addr, data)
         self.scroll_latch = bor(band(self.scroll_latch, 0x7fe0), rshift(data, 3))
         local xfine = 8 - band(data, 0x7)
         --self.bg_pixels = rotate(self.bg_pixels, self.scroll_xfine - xfine)
-        self.bg_pixels_idx = rotatePositiveIdxRaw(self.bg_pixels_idx + self.scroll_xfine - xfine, self.bg_pixels_size)
+        self.bg_pixels_idx = rotatePositiveIdx(self.bg_pixels, self.bg_pixels_idx + self.scroll_xfine - xfine)
         self.scroll_xfine = xfine
     else
         self.scroll_latch = bor(band(self.scroll_latch, 0x0c1f), band(bor(lshift(data, 2), lshift(data, 12)), 0x73e0))
@@ -914,20 +913,19 @@ function PPU:preload_tiles()
         return
     end
     local patt = self.bg_pattern_lut[self.bg_pattern]
+    local length = #self.bg_pixels
     local idx = self.scroll_xfine + 1
     for i = 0, 7 do --8 do
-        self:set_bg_pxs(i + idx, patt[i])
+        self:set_bg_pxs(i + idx, patt[i], length)
     end
 end
 
-function PPU:index_bg_pxs(idx)
-    idx = rotatePositiveIdxRaw(self.bg_pixels_idx + idx, self.bg_pixels_size)
-    return self.bg_pixels[idx]
+function PPU:index_bg_pxs(idx, size)
+    return self.bg_pixels[rotatePositiveIdx(self.bg_pixels, self.bg_pixels_idx + idx, size)]
 end
 
-function PPU:set_bg_pxs(idx, v)
-    idx = rotatePositiveIdxRaw(self.bg_pixels_idx + idx, self.bg_pixels_size)
-    self.bg_pixels[idx] = v
+function PPU:set_bg_pxs(idx, v, size)
+    self.bg_pixels[rotatePositiveIdx(self.bg_pixels, self.bg_pixels_idx + idx, size)] = v
 end
 
 function PPU:load_tiles()
@@ -937,11 +935,12 @@ function PPU:load_tiles()
     end
     ]]
     --self.bg_pixels = rotate(self.bg_pixels, 8)
-    self.bg_pixels_idx = rotatePositiveIdxRaw(self.bg_pixels_idx + 8, self.bg_pixels_size)
+    local length = #self.bg_pixels
+    self.bg_pixels_idx = rotatePositiveIdx(self.bg_pixels, self.bg_pixels_idx + 8, length)
     local patt = self.bg_pattern_lut[self.bg_pattern]
     local idx = self.scroll_xfine + 1
     for i = 0, 7 do --8 do
-        self:set_bg_pxs(i + idx, patt[i])
+        self:set_bg_pxs(i + idx, patt[i], length)
     end
 end
 
