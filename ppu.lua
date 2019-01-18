@@ -1151,14 +1151,14 @@ function PPU:render_pixel()
     end
     do return end
 --]]
-    if not self.any_show then
-        self:set_bg_pxs(self.hclk % 8 + 1, 0)
-        local px = self.output_color[band(self.scroll_addr_5_14, 0x3f00) == 0x3f00 and self.scroll_addr_0_4 or 0]
-        if px then
-            self.output_pixels_size = self.output_pixels_size + 1
-            self.output_pixels[self.output_pixels_size] = px
-        end
+    --if not self.any_show then
+    self:set_bg_pxs(self.hclk % 8 + 1, 0)
+    local px = self.output_color[band(self.scroll_addr_5_14, 0x3f00) == 0x3f00 and self.scroll_addr_0_4 or 0]
+    if px then
+        self.output_pixels_size = self.output_pixels_size + 1
+        self.output_pixels[self.output_pixels_size] = px
     end
+    --end
 end
 
 -- just a placeholder; used for batch_render_pixels optimization
@@ -1546,8 +1546,9 @@ function PPU:main_loop()
                         self:evaluate_sprites_even()
                     end
                     self:open_name()
+                else
+                    self:render_pixel()
                 end
-                self:render_pixel()
                 self:wait_one_clock()
 
                 -- when 1, 9, ..., 249
@@ -1559,8 +1560,9 @@ function PPU:main_loop()
                     if self.hclk >= 64 then
                         self:evaluate_sprites_odd()
                     end
+                else
+                    self:render_pixel()
                 end
-                self:render_pixel()
                 self:wait_one_clock()
 
                 -- when 2, 10, ..., 250
@@ -1569,8 +1571,9 @@ function PPU:main_loop()
                         self:evaluate_sprites_even()
                     end
                     self:open_attr()
+                else
+                    self:render_pixel()
                 end
-                self:render_pixel()
                 self:wait_one_clock()
 
                 -- when 3, 11, ..., 251
@@ -1583,8 +1586,9 @@ function PPU:main_loop()
                         self:scroll_clock_y()
                     end
                     self:scroll_clock_x()
+                else
+                    self:render_pixel()
                 end
-                self:render_pixel()
                 self:wait_one_clock()
 
                 -- when 4, 12, ..., 252
@@ -1593,8 +1597,9 @@ function PPU:main_loop()
                         self:evaluate_sprites_even()
                     end
                     self:open_pattern(self.io_pattern)
+                else
+                    self:render_pixel()
                 end
-                self:render_pixel()
                 self:wait_one_clock()
 
                 -- when 5, 13, ..., 253
@@ -1603,8 +1608,9 @@ function PPU:main_loop()
                     if self.hclk >= 64 then
                         self:evaluate_sprites_odd()
                     end
+                else
+                    self:render_pixel()
                 end
-                self:render_pixel()
                 self:wait_one_clock()
 
                 -- when 6, 14, ..., 254
@@ -1613,8 +1619,9 @@ function PPU:main_loop()
                         self:evaluate_sprites_even()
                     end
                     self:open_pattern(bor(self.io_pattern, 8))
+                else
+                    self:render_pixel()
                 end
-                self:render_pixel()
                 self:wait_one_clock()
 
                 -- when 7, 15, ..., 255
@@ -1623,8 +1630,9 @@ function PPU:main_loop()
                     if self.hclk >= 64 then
                         self:evaluate_sprites_odd()
                     end
+                else
+                    self:render_pixel()
                 end
-                self:render_pixel()
                 -- rubocop:disable Style/NestedModifier, Style/IfUnlessModifierOfIfUnless:
                 if self.hclk ~= 255 and self.any_show then
                     self:update_enabled_flags()
