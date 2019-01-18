@@ -1296,6 +1296,7 @@ function CPU:run()
     local do_clock = self.do_clock
     repeat
         repeat
+            --self:run_once(self)
             run(self) --[[
             printf("STEP1")
             printf("%04X", self.clk)
@@ -1307,6 +1308,7 @@ function CPU:run()
         printf("STEP2")
         printf("%04X", self.clk_target)
         ]]
+        --self:do_clock(self)
         do_clock(self)
     until not (self.clk < self.clk_frame)
     --[[
@@ -1453,6 +1455,8 @@ op({0x04, 0x44, 0x64}, {"no_op", "_nop", 1, 3})
 op({0x14, 0x34, 0x54, 0x74, 0xd4, 0xf4}, {"no_op", "_nop", 1, 4})
 op({0x0c}, {"no_op", "_nop", 2, 4})
 op({0x1c, 0x3c, 0x5c, 0x7c, 0xdc, 0xfc}, {"r_op", "_nop", "ctl"})
+op({0x00}, "_brk")
+op({0x02, 0x12, 0x22, 0x32, 0x42, 0x52, 0x62, 0x72, 0x92, 0xb2, 0xd2, 0xf2}, "_jam")
 --[[
   Thiss aims to "cache" unpack (Maybe also "cache" self and op indexing?)
 CPU.DISPATCHER = {}

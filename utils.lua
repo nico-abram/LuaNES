@@ -26,8 +26,9 @@ function UTILS.tSetter(t)
     end
 end
 function UTILS.tGetter(t, offs)
+    offs = (offs or 1)
     return function(i)
-        return t[i + (offs or 1)]
+        return t[i + offs]
     end
 end
 function UTILS.map(t, f)

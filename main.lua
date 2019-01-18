@@ -65,7 +65,7 @@ end
 love.frame = 0
 local time = 0
 local timeTwo = 0
-local rate = 1 / 60
+local rate = 1 / 51
 local fps = 0
 local fpstmp = 0
 local pixelCount = PPU.SCREEN_HEIGHT * PPU.SCREEN_WIDTH
@@ -78,13 +78,41 @@ local function update()
     keyEvents = {}
     Nes:run_once()
 end
+local function drawScreen()
+    love.graphics.draw(image, 50, 50)
+    love.graphics.print("Current FPS: " .. tostring(love.timer.getFPS()) .. " " .. tostring(fps), 10, 10)
+end
+local function drawPalette()
+    local palette = Nes.cpu.ppu.output_color
+    local w, h = 10, 10
+    local x, y = 700, 500
+    local row, column = 4, 8
+    for i = 1, #palette do
+        local px = palette[i]
+        if px then
+            local r = px[1] / 256
+            local g = px[2] / 256
+            local b = px[3] / 256
+            love.graphics.setColor(r, g, b, 1)
+            love.graphics.rectangle("fill", x + ((i - 1) % row) * w, y + math.floor((i - 1) / 4) * h, w, h)
+        end
+    end
+    love.graphics.setColor(1, 1, 1, 1)
+end
+local function draw()
+    drawScreen()
+    --drawPalette()
+end
 function love.draw()
-    --[[
+    --[
     time = time + love.timer.getDelta()
     timeTwo = timeTwo + love.timer.getDelta()
     if time > rate then
         time = 0
         update()
+    else
+        draw()
+        return
     end
     if timeTwo > 1 then
         timeTwo = 0
@@ -92,7 +120,7 @@ function love.draw()
         fpstmp = 0
     end
     --]]
-    update()
+    --update()
     --[
     local pxs = Nes.cpu.ppu.output_pixels
     for i = 1, pixelCount do
@@ -122,36 +150,6 @@ function love.draw()
         imageData:setPixel(xx, yy, px[1], px[2], px[3], 1)
         --]]
     end
-    -- draw palette
-    --[[
-    local palette = Nes.cpu.ppu.output_color
-    local w,h = 10,10
-    local x,y = 700,500
-    local row,column = 4, 8
-    for i=1,#palette do
-        local px = palette[i]
-        if px then 
-        local r = px[1] / 256
-        local g = px[2] / 256
-        local b = px[3] / 256
-        love.graphics.setColor( r, g, b, 1 )
-        love.graphics.rectangle("fill", x+((i-1)%row)*w, y+math.floor((i-1)/4)*h, w, h )
-        end
-    end
-        love.graphics.setColor( 1, 1, 1, 1 )
-    --]]
-    --image = love.graphics.newImage(imageData)
     image:replacePixels(imageData)
-    love.graphics.draw(image, 50, 50)
-    --]]
-    --[[
-    love.frame = love.frame + 1
-    if love.frame % 5 == 0 then
-        love.report = love.profiler.report("time", 20)
-        print(love.report)
-        a = 0 / 0
-        love.profiler.reset()
-    end
-    --]]
-    love.graphics.print("Current FPS: " .. tostring(love.timer.getFPS()) .. " " .. tostring(fps), 10, 10)
+    draw()
 end
