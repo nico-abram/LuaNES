@@ -1,4 +1,3 @@
-local memoize = require("libs/memoize")
 UTILS = {}
 local UTILS = UTILS
 
@@ -49,70 +48,60 @@ function UTILS.shiftingArray()
     local _t = {}
     local t = {}
     local shift = 0
-    setmetatable(
-        t,
-        {
-            __index = function(t, k)
-                return _t[UTILS.rotateIdx(_t, k + shift)]
-            end,
-            __newindex = function(t, k, v)
-                if k > #_t then
-                    table.insert(_t, shift + k - #_t - 1, v)
-                else
-                    _t[UTILS.rotateIdx(_t, k + shift)] = v
-                end
-            end
-        }
-    )
-    t.rotate = function(self, newshift)
-        shift = UTILS.rotateIdx(_t, newshift + shift)
-    end
+    setmetatable(t, {
+      __index = function (t,k)
+        return _t[UTILS.rotateIdx(_t,k+shift)]
+      end,
+      __newindex = function (t,k,v)
+        if k > #_t then
+            table.insert(_t, shift + k - #_t - 1, v)
+        else
+         _t[UTILS.rotateIdx(_t,k+shift)] = v
+        end
+      end})
+      t.rotate = function(self, newshift)
+        shift = UTILS.rotateIdx(_t,newshift + shift)
+      end
     return t
 end
 
 function UTILS.indexRotating(t, idx)
-    return t[UTILS.rotateIdx(t, idx)]
+    return t[UTILS.rotateIdx(t,idx)]
 end
 
-function UTILS.rotatePositiveIdxRaw(idx, size)
-    return idx < size and idx or (((idx - 1) % size) + 1)
-end
---[[ memoizing thi was lower when i tried
-local rotate2 = memoize(rotate)
-]]
-local rotate = UTILS.rotatePositiveIdxRaw
+
 function UTILS.rotatePositiveIdx(t, idx, size)
     size = size or #t
-    return rotate(idx, size)
+    return ((idx - 1) % size) +1
 end
 
 function UTILS.rotateIdx(t, idx, size)
     size = size or #t
     if idx > size then
-        return UTILS.rotateIdx(t, idx - size, size)
+        return UTILS.rotateIdx(t,idx-size, size)
     elseif idx < 1 then
-        return UTILS.rotateIdx(t, idx + size, size)
+        return UTILS.rotateIdx(t, idx+size, size)
     else
         return idx
     end
 end
 
 -- In-place
-function UTILS.rotate(array, shift) -- Works for array with consecutive entries
+function UTILS.rotate( array, shift ) -- Works for array with consecutive entries
     shift = shift or 1 -- make second arg optional, defaults to 1
-
+    
     local start = array[0] and 0 or 1
     local size = #array
 
     if shift > 0 then
-        for i = 1, math.abs(shift) do
-            table.insert(array, 1, table.remove(array, size))
-        end
-    else
-        for i = 1, math.abs(shift) do
-            table.insert(array, size, table.remove(array, 1))
-        end
-    end
+	    for i = 1, math.abs(shift) do
+	        table.insert( array, 1, table.remove( array, size ) )
+	    end
+	else
+		for i = 1, math.abs(shift) do
+	        table.insert( array, size, table.remove( array, 1 ) )
+	    end	
+	end
     return array
 end
 function UTILS.rotateNew(t, r)
@@ -123,9 +112,9 @@ function UTILS.rotateNew(t, r)
         for i = start, size do
             local idx = i + r
             if idx > size then
-                idx = idx - size
+                idx =  idx - size 
             elseif (idx < start) then
-                idx = idx + size
+                idx=  idx + size
             end
             rotated[i] = t[idx]
         end
@@ -133,9 +122,9 @@ function UTILS.rotateNew(t, r)
         for i = 1, size do
             local idx = size - i + r
             if idx > size then
-                idx = idx - size
+                idx =  idx - size 
             elseif (idx < start) then
-                idx = idx + size
+                idx=  idx + size
             end
             rotated[i] = t[idx]
         end
