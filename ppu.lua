@@ -836,7 +836,7 @@ function PPU:open_attr()
     if not self.any_show then
         return
     end
-    local t = self.attr_lut[self.scroll_addr_0_4 + self.scroll_addr_5_14]
+    local t = self.attr_lut[bit.bor(self.scroll_addr_0_4, self.scroll_addr_5_14)]
     self.io_addr, self.bg_pattern_lut_fetched = t[1], t[2]
     return self:update_address_line()
 end

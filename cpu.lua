@@ -1296,6 +1296,7 @@ function CPU:run()
     local do_clock = self.do_clock
     repeat
         repeat
+            --self:run_once(self)
             run(self) --[[
             printf("STEP1")
             printf("%04X", self.clk)
@@ -1307,6 +1308,7 @@ function CPU:run()
         printf("STEP2")
         printf("%04X", self.clk_target)
         ]]
+        --self:do_clock(self)
         do_clock(self)
     until not (self.clk < self.clk_frame)
     --[[
