@@ -8,9 +8,10 @@ Get https://love2d.org/ and run `love . rom.nes` in the repo folder.
 # Overview
 
 The NES basically has 3 "main" or big components: the PPU (Picture Processing Unit), CPU and APU (Audio Processing Unit).
-ROMs "map" their memory to CPU addreses with different mappers, depending on a code in the rom header. 
+ROMs "map" their memory to CPU addreses with different mappers (Often mirroring memory), depending on a code in the rom header.
+main.lua is the love2d entrance point (And the only file with love specific code). nes.lua ties everything together. The cpu is fairly straightforward. The APU can be considered a dummy implementation, which is correct from the point of view of the program running, but currently doesnt output audio. The PPU generates the video output. The PPU, APU and pads are mapped to memory (Status bytes, read/write addresses, etc. Check #Reference more details).
 
-Reference:
+# Reference
 
 optcarrot docs:
 
@@ -38,3 +39,7 @@ Wikipedia pages might also be helpful.
 # Progress
 
 Should be somewhat functional. Audio is not being output yet (I'm not sure if you can even stream raw samples in love2d), and the output from the APU hasn't been tested (At least the timing of it seems to be correct). It's also still not capping at 60 fps, so the speed will vary. Performance needs to improve a little bit more to be able to run at a somewhat stable 60fps.
+
+# Controls
+
+For now, it uses the WASD keys for movement, O for the A button, P for B, I for select and enter for start. In the future, there will probably be a configuration file with a lua table in it.

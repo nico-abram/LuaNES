@@ -228,7 +228,6 @@ function APU:vsync()
   self.frame_counter = self.frame_counter - frame
 end
 
---##########################################################################
 -- helpers
 
 function APU:clock_oscillators(two_clocks)
@@ -303,7 +302,6 @@ function APU:proceed(target)
   end
 end
 
---##########################################################################
 -- mapped memory handlers
 
 -- Control

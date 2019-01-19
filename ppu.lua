@@ -310,7 +310,6 @@ end
 
 function PPU:setup_lut()
     self.lut_update = {}
-    --{}.compare_by_identity
 
     self.name_lut =
         map(
@@ -319,8 +318,6 @@ function PPU:setup_lut()
             local nmt_bank = self.nmt_ref[band(rshift(i, 10), 3)]
             local nmt_idx = band(i, 0x03ff)
             local fixed = bor(band(rshift(i, 12), 7), lshift(nthBitIsSetInt(i, 15), 12))
-            -- WTF
-            --(((self.lut_update[nmt_bank] or= [])[nmt_idx] or= [nil, nil])[0] or= []) << [i, fixed]
             if not self.lut_update[nmt_bank] then
                 self.lut_update[nmt_bank] = {}
             end
@@ -366,16 +363,10 @@ function PPU:setup_lut()
             end
             upd = upd[2]
             upd[#upd + 1] = entries[key]
-            --entries[key] or=
-            --(((self.lut_update[nmt_bank] or= [])[nmt_idx] or= [nil, nil])[1] or= []) << entries[key]
             return entries[key]
         end
     )
-    --.freeze
-    -- FREZE WTF
-
     return entries
-    --entries.each_value {|a| a.uniq! {|entry| entry.object_id } }
 end
 
 --------------------------------------------------------------------------------------------------------------------

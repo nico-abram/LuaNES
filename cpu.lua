@@ -63,18 +63,11 @@ function CPU:steal_clocks(clk)
 end
 
 function CPU:odd_clock()
-    --print "odd_clock"
-    --print(self.clk_total)
-    --print(self.clk)
-    --print(CLK[2])
     return ((self.clk_total + self.clk) % CLK[2]) ~= 0
 end
 
 function CPU:update()
-    --print "cpu update"
-    --print(self.clk)
     self.apu:clock_dma(self.clk)
-    --print(self.clk)
     return self.clk
 end
 
@@ -94,11 +87,6 @@ end
 function CPU:set_next_frame_clock(x)
     self.clk_frame = x
     self.clk_target = x < self.clk_target and x or self.clk_target
-    --[[
-    printf("set_next_frame_clock")
-    printf("%04X", x)
-    printf("%04X", self.clk_target)
-    ]]
     return x
 end
 function CPU:current_clock()
@@ -106,7 +94,6 @@ function CPU:current_clock()
 end
 
 function CPU:peek_nop(addr)
-    --printf("PNOP:%02X",addr)
     return rshift(addr, 8)
 end
 
@@ -130,7 +117,6 @@ function CPU:fetch(addr)
     return self._fetch[addr](addr)
 end
 function CPU:store(addr, value)
-    --print(type(self._store[addr])=="table" and self._store[addr]==UNDEFINED)
     return self._store[addr](addr, value)
 end
 
@@ -250,11 +236,7 @@ end
 
 function CPU:boot()
     self.clk = CLK[7] -- clocks it takes to boot
-    --self._pc = 0xC000
-    --print "boot"
-    --printf("%04X", self._pc)
     self._pc = self.conf.pc or self:peek16(CPU.RESET_VECTOR)
-    --printf("%04X", self._pc)
 end
 
 function CPU:vsync()
@@ -458,26 +440,15 @@ end
 function CPU:abs(read, write)
     self.addr = self:peek16(self._pc)
     self._pc = self._pc + 2
-    --print(self.clk)
     self.clk = self.clk + CLK[3]
-    --print(self.clk)
     return self:read_write(read, write)
 end
 
 -- absolute indexed addressing
 function CPU:abs_reg(indexed, read, write)
     local addr = self._pc + 1
-    --printf("pc:%02X", self._pc)
     local i = indexed + self:fetch(self._pc)
-    --[[
-  printf("addr:%02X", self.addr)
-  printf("idxd:%02X", indexed)
-  printf("postpc:%02X", self._pc)
-  printf("i:%02X", i)
-  printf("laddr:%02X", addr)
-  ]]
     self.addr = band(lshift(self:fetch(addr), 8) + i, 0xffff)
-    --printf("postaddr%02X", self.addr)
     if write then
         addr = band(self.addr - band(i, 0x100), 0xffff)
         self:fetch(addr)
@@ -490,7 +461,6 @@ function CPU:abs_reg(indexed, read, write)
             self.clk = self.clk + CLK[1]
         end
     end
-    --printf("%02X", addr)
     self:read_write(read, write)
     self._pc = self._pc + 2
 end
@@ -989,8 +959,6 @@ end
 
 function CPU:_shs()
     self._sp = band(self._a, self._x)
-    --printf("shs")
-    --printf("%X04",self._sp)
     self.data = band(self._sp, (rshift(self.addr, 8) + 1))
 end
 
@@ -1141,12 +1109,10 @@ function CPU:do_clock()
             self:do_isr(IRQ_VECTOR)
         end
     else
-        --print "cpu do isr nmi"
         self.clk_nmi = FOREVER_CLOCK
         self.clk_irq = FOREVER_CLOCK
         self:do_isr(NMI_VECTOR)
     end
-    --print(self.clk)
     self.clk_target = clock
 end
 local asd = 0

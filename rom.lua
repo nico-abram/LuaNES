@@ -69,14 +69,6 @@ function ROM:initialize(conf, cpu, ppu, basename, bytes, str)
     for i = 0xc000 + 1, 0x4000 + 0xc000 do
         self.prg_ref[i] = self.prg_banks[#(self.prg_banks)][i - 0xc000]
     end
-    --[[
-    UTILS.print("rominit")
-    UTILS.printf("%04x", self.prg_ref[0xfffd])
-    UTILS.printf("%04x", self.prg_ref[0xfffd - 0x8000])
-    UTILS.print("rominit")
-    UTILS.print(self.prg_ref[0x8000 + 1])
-    UTILS.print(self.prg_banks[1][1])
---]]
     self.chr_ram = chr_count == 0 -- No CHR bank implies CHR-RAM (writable CHR bank)
     self.chr_ref = self.chr_ram and (UTILS.fill({}, 0, 0x2000)) or UTILS.copy(self.chr_banks[1])
 
@@ -96,14 +88,6 @@ function ROM:initialize(conf, cpu, ppu, basename, bytes, str)
 
     self.ppu.nametables = self.mirroring
     self.ppu:set_chr_mem(self.chr_ref, self.chr_ram)
-    --[[
-    UTILS.print(#(self.chr_ref))
-    UTILS.print(#(self.chr_banks))
-    UTILS.print(#(self.prg_ref))
-    UTILS.print((self.chr_ref[1]))
-    UTILS.print(#(self.chr_banks[1]))
-    UTILS.print((self.prg_ref[1]))
-    --]]
 end
 
 function ROM:init()
@@ -111,16 +95,6 @@ end
 
 function ROM:reset()
     self.cpu:add_mappings(range(0x8000, 0xffff), UTILS.tGetter(self.prg_ref), CPU.UNDEFINED)
-end
-
-function ROM:inspect()
-    return ""
-    --[[{}
-        "Mapper: #{ self.mapper } (#{ self.class.to_s.split("::").last })",
-        "PRG Banks: #{ self.prg_banks.size }",
-        "CHR Banks: #{ self.chr_banks.size }",
-        "Mirroring: #{ self.mirroring }",
-    }.join("\n")]]
 end
 
 function ROM:peek_6000(addr)
@@ -141,7 +115,6 @@ function ROM:load_battery()
         return
     end
     local sav = self.basename + ".sav"
-    --return unless File.readable?(sav)
     self.wrk.replace(sav.bytes)
     local inp = assert(io.open(sav, "rb"))
     self.wrk = serpent.load(inp:read("*all"))
@@ -179,8 +152,6 @@ function ROM.load(conf, cpu, ppu)
     end
     local mapper = bor(rshift(blob[7], 4), band(blob[8], 0xf0))
 
-    --print "amper"
-    --print(mapper)
     local klass = ROM.MAPPER_DB[mapper]
     if not klass then
         error(string.format("Unsupported mapper type 0x%02x", mapper))
@@ -451,7 +422,6 @@ function MMC3:reset()
     for i = 0, 7 do
         self:update_chr(i * 0x400, i)
     end
-    --8.times {|i| update_chr(i * 0x400, i) }
 
     self.clock = 0
     if PPU then
