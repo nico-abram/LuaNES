@@ -1,3 +1,9 @@
+local band = bit.band
+local bor = bit.bor
+local bxor = bit.bxor
+local bnot = bit.bnot
+local lshift = bit.lshift
+local rshift = bit.rshift
 PPU = {}
 local PPU = PPU
 PPU._mt = {__index = PPU}
@@ -326,9 +332,6 @@ function PPU:setup_lut()
     )
     --.freeze
     -- FREZE WTF
-    for k, v in pairs(entries) do
-        entries[k] = uniq(v)
-    end
 
     return entries
     --entries.each_value {|a| a.uniq! {|entry| entry.object_id } }
