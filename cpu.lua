@@ -1,11 +1,16 @@
-local UTILS = UTILS
-UTILS:import()
+local band, bor, bxor, bnot, lshift, rshift = bit.band, bit.bor, bit.bxor, bit.bnot, bit.lshift, bit.rshift
+local map, rotatePositiveIdx, nthBitIsSet, nthBitIsSetInt =
+    UTILS.map,
+    UTILS.rotatePositiveIdx,
+    UTILS.nthBitIsSet,
+    UTILS.nthBitIsSetInt
 
 CPU = {
     RP2A03_CC = 12,
     FOREVER_CLOCK = 0xffffffff
 }
 local CPU = CPU
+local DISPATCH
 CPU._mt = {__index = CPU}
 
 do
@@ -26,14 +31,17 @@ CPU.IRQ_EXT = 0x01
 CPU.IRQ_FRAME = 0x40
 CPU.IRQ_DMC = 0x80
 
-CPU.NMIVector = 0xFFFA
-CPU.ResetVector = 0xFFFC
-CPU.IRQVector = 0xFFFE
 CPU.ClockRates = {
     Ntsc = 1789773,
     Pal = 1662607,
     Dendy = 1773448
 }
+local RAM_SIZE, UNDEFINED, NMI_VECTOR, IRQ_VECTOR, FOREVER_CLOCK =
+    CPU.RAM_SIZE,
+    CPU.UNDEFINED,
+    CPU.NMI_VECTOR,
+    CPU.IRQ_VECTOR,
+    CPU.FOREVER_CLOCK
 
 local UNDEFINED = CPU.UNDEFINED
 local CLK = CPU.CLK
@@ -55,18 +63,11 @@ function CPU:steal_clocks(clk)
 end
 
 function CPU:odd_clock()
-    --print "odd_clock"
-    --print(self.clk_total)
-    --print(self.clk)
-    --print(CLK[2])
     return ((self.clk_total + self.clk) % CLK[2]) ~= 0
 end
 
 function CPU:update()
-    --print "cpu update"
-    --print(self.clk)
     self.apu:clock_dma(self.clk)
-    --print(self.clk)
     return self.clk
 end
 
@@ -86,11 +87,6 @@ end
 function CPU:set_next_frame_clock(x)
     self.clk_frame = x
     self.clk_target = x < self.clk_target and x or self.clk_target
-    --[[
-    printf("set_next_frame_clock")
-    printf("%04X", x)
-    printf("%04X", self.clk_target)
-    ]]
     return x
 end
 function CPU:current_clock()
@@ -98,7 +94,6 @@ function CPU:current_clock()
 end
 
 function CPU:peek_nop(addr)
-    --printf("PNOP:%02X",addr)
     return rshift(addr, 8)
 end
 
@@ -111,64 +106,23 @@ function CPU:peek_jam_2(_addr)
 end
 
 function CPU:peek_ram(addr)
-    return self.ram[addr % CPU.RAM_SIZE]
+    return self.ram[addr % CPRAM_SIZE]
 end
 function CPU:poke_ram(addr, data)
-    self.ram[addr % CPU.RAM_SIZE] = data
+    self.ram[addr % RAM_SIZE] = data
 end
 
 -- read an addr (8 bit)
 function CPU:fetch(addr)
-    local getter = self._fetch[addr]
-    getter = (type(getter) ~= "table" or getter ~= UNDEFINED) and getter or nil
-    --[[
-    if not getter then
-        printf("Error fetching %04X state:", addr)
-        self:printState()
-        local reach = 2
-        printf("Surroundings (range:%i):", reach)
-        for i = addr - reach, addr + reach do
-            local getter2 = self._fetch[i]
-            if getter2 and (type(getter2) ~= "table" or getter2 ~= UNDEFINED) then
-                printf("%04X %04x", i, getter2(i))
-            else
-                if not getter2 then
-                    printf("%04X NIL", i)
-                else
-                    printf("%04X UNDEF", i)
-                end
-            end
-        end
-        error(string.format("Error fetching %04X", addr))
-    end
-    --]]
-    --print "ASD"
-    --printf("%04X : %04X", addr, getter(addr))
-    return getter and getter(addr) or nil
+    return self._fetch[addr](addr)
 end
 function CPU:store(addr, value)
-    --print(type(self._store[addr])=="table" and self._store[addr]==UNDEFINED)
     return self._store[addr](addr, value)
 end
 
 -- Read 16 bits (word) from addr
 function CPU:peek16(addr)
-    --print "peek16"
-    local a = self:fetch(addr)
-    local b = lshift(self:fetch(addr + 1), 8)
-    --print(a)
-    --print(b)
-    local x = a + b
-    --[[
-    print "peek16"
-printf("%02X", a)
-  printf("%02X", b)
-    UTILS.print(a)
-    UTILS.print(b)
-    UTILS.print(addr)
-    UTILS.print(x)
-    --]]
-    return x
+    return self:fetch(addr) + lshift(self:fetch(addr + 1), 8)
 end
 
 function CPU:add_mappings(addr, peek, poke)
@@ -204,39 +158,33 @@ function CPU:reset()
     fill(self.ram, 0xff)
     self.clk = 0
     self.clk_total = 0
-    self:add_mappings(range(0x0000, 0x07ff), tGetter(self.ram, 0), tSetter(self.ram))
-    self:add_mappings(range(0x0800, 0x1fff), bind(self.peek_ram, self), bind(self.poke_ram, self))
+    local ram = self.ram
+    self:add_mappings(
+        range(0x0000, 0x07ff),
+        function(i)
+            return ram[i]
+        end,
+        tSetter(self.ram)
+    )
+    self:add_mappings(
+        range(0x0800, 0x1fff),
+        function(i)
+            return ram[i % RAM_SIZE]
+        end,
+        bind(self.poke_ram, self)
+    )
     self:add_mappings(range(0x2000, 0xffff), bind(self.peek_nop, self), UNDEFINED) -- 8 PPU registers mirrored
     --self:add_mappings(0xfffc, bind(self.peek_jam_1, self), UNDEFINED)
     --self:add_mappings(0xfffd, bind(self.peek_jam_2, self), UNDEFINED)
-end
-
-function CPU:setpc()
-    --[[
-      print "RERERERE"
-      printf("%04X",self:fetch(CPU.RESET_VECTOR-1))
-      print "RERERERE"
-      printf("%04X",self:fetch(CPU.RESET_VECTOR))
-      print "RERERERE"
-      printf("%04X",self:fetch(CPU.RESET_VECTOR+1))
-      print "RERERERE"
-      printf("%04X",self._pc)
-      print "RERERERE"
-      printf("%04X",self:peek16(CPU.RESET_VECTOR-1))
-      print "RERERERE"
-      printf("%04X",self:peek16(CPU.RESET_VECTOR+1))
-      print "RERERERE"
-      printf("%04X",self:peek16(CPU.RESET_VECTOR+2))
-      ]]
 end
 
 function CPU:new(conf)
     local cpu = {}
     setmetatable(cpu, CPU._mt)
     cpu.conf = conf or {loglevel = 0, pc = nil}
-    cpu.ram = fill({}, CPU.UNDEFINED, CPU.RAM_SIZE)
-    cpu._store = fill({}, CPU.UNDEFINED, CPU.MAINMEM_SIZE)
-    cpu._fetch = fill({}, CPU.UNDEFINED, CPU.MAINMEM_SIZE)
+    cpu.ram = fill({}, UNDEFINED, RAM_SIZE)
+    cpu._store = fill({}, UNDEFINED, CPU.MAINMEM_SIZE)
+    cpu._fetch = fill({}, UNDEFINED, CPU.MAINMEM_SIZE)
     cpu.peeks = {}
     cpu.pokes = {}
     cpu.clk_rate = CPU.ClockRates.Ntsc
@@ -244,8 +192,8 @@ function CPU:new(conf)
     cpu.clk_frame = 0
     cpu.clk_target = 0 -- the goal clock for the current CPU#run
     cpu.clk_total = 0 -- the total elapsed clocks
-    cpu.clk_nmi = CPU.FOREVER_CLOCK -- the next NMI clock (CPU.FOREVER_CLOCK means "not scheduled")
-    cpu.clk_irq = CPU.FOREVER_CLOCK -- the next IRQ clock
+    cpu.clk_nmi = FOREVER_CLOCK -- the next NMI clock (FOREVER_CLOCK means "not scheduled")
+    cpu.clk_irq = FOREVER_CLOCK -- the next IRQ clock
     cpu.irq_flags = 0
     cpu.jammed = false
     cpu:reset()
@@ -274,8 +222,11 @@ function CPU:dmc_dma(addr)
 end
 
 function CPU:sprite_dma(addr, sp_ram)
-    for i = 1, 256 do
-        sp_ram[i] = self.ram[addr + i - 1]
+    do
+        local ram = self.ram
+        for i = 1, 256 do
+            sp_ram[i] = ram[addr + i - 1]
+        end
     end
     for i = 0, 63 do
         local j = i * 4 + 3
@@ -285,11 +236,7 @@ end
 
 function CPU:boot()
     self.clk = CLK[7] -- clocks it takes to boot
-    --self._pc = 0xC000
-    --print "boot"
-    --printf("%04X", self._pc)
     self._pc = self.conf.pc or self:peek16(CPU.RESET_VECTOR)
-    --printf("%04X", self._pc)
 end
 
 function CPU:vsync()
@@ -300,14 +247,14 @@ function CPU:vsync()
     self.clk = self.clk - self.clk_frame
     self.clk_total = self.clk_total + self.clk_frame
 
-    if self.clk_nmi ~= CPU.FOREVER_CLOCK then
+    if self.clk_nmi ~= FOREVER_CLOCK then
         self.clk_nmi = self.clk_nmi - self.clk_frame
     end
-    if self.clk_irq ~= CPU.FOREVER_CLOCK then
+    if self.clk_irq ~= FOREVER_CLOCK then
         self.clk_irq = self.clk_irq - self.clk_frame
-    end
-    if self.clk_irq < 0 then
-        self.clk_irq = 0
+        if self.clk_irq < 0 then
+            self.clk_irq = 0
+        end
     end
 end
 
@@ -318,7 +265,7 @@ function CPU:clear_irq(line)
     local old_irq_flags = band(self.irq_flags, bor(CPU.IRQ_FRAME, CPU.IRQ_DMC))
     self.irq_flags = band(bxor(self.irq_flags, bxor(line, bor(bor(CPU.IRQ_EXT, CPU.IRQ_FRAME), CPU.IRQ_DMC))))
     if self.irq_flags == 0 then
-        self.clk_irq = CPU.FOREVER_CLOCK
+        self.clk_irq = FOREVER_CLOCK
     end
     return old_irq_flags
 end
@@ -333,13 +280,13 @@ end
 
 function CPU:do_irq(line, clk)
     self.irq_flags = bor(self.irq_flags, line)
-    if self.clk_irq == CPU.FOREVER_CLOCK and self._p_i == 0 then
+    if self.clk_irq == FOREVER_CLOCK and self._p_i == 0 then
         self.clk_irq = self:next_interrupt_clock(clk)
     end
 end
 
 function CPU:do_nmi(clk)
-    if self.clk_nmi == CPU.FOREVER_CLOCK then
+    if self.clk_nmi == FOREVER_CLOCK then
         self.clk_nmi = self:next_interrupt_clock(clk)
     end
 end
@@ -352,25 +299,22 @@ function CPU:do_isr(vector)
     self:push8(self:flags_pack())
     self._p_i = 0x04
     self.clk = self.clk + CLK[7]
-    local addr = vector == CPU.NMI_VECTOR and CPU.NMI_VECTOR or self:fetch_irq_isr_vector()
+    local addr = vector == NMI_VECTOR and NMI_VECTOR or self:fetch_irq_isr_vector()
     self._pc = self:peek16(addr)
 end
 
 function CPU:fetch_irq_isr_vector()
     if self.clk >= self.clk_frame then
-        --print("30000")
         self:fetch(0x3000)
     end
-    if self.clk_nmi ~= CPU.FOREVER_CLOCK then
+    if self.clk_nmi ~= FOREVER_CLOCK then
         if self.clk_nmi + CLK[2] <= self.clk then
-            self.clk_nmi = CPU.FOREVER_CLOCK
-            --print("NMI")
-            return CPU.NMI_VECTOR
+            self.clk_nmi = FOREVER_CLOCK
+            return NMI_VECTOR
         end
         self.clk_nmi = self.clk + 1
     end
-    --print("SAD")
-    return CPU.IRQ_VECTOR
+    return IRQ_VECTOR
 end
 
 ------------------------------------------------------------------------------------------------------------------------
@@ -379,17 +323,12 @@ end
 ------ P regeister ------
 
 function CPU:flags_pack()
+    local nz = self._p_nz
     return bor(
         bor(
             bor(
                 bor(
-                    bor(
-                        bor(
-                            band(bor(rshift(self._p_nz, 1), self._p_nz), 0x80),
-                            (band(self._p_nz, 0xff) ~= 0 and 0 or 2)
-                        ),
-                        self._p_c
-                    ),
+                    bor(bor(band(bor(rshift(nz, 1), nz), 0x80), (band(nz, 0xff) ~= 0 and 0 or 2)), self._p_c),
                     self._p_v ~= 0 and 0x40 or 0
                 ),
                 self._p_i
@@ -398,16 +337,6 @@ function CPU:flags_pack()
         ),
         0x20
     )
-    --[[
-        -- NVssDIZC
-      ((self._p_nz | self._p_nz >> 1) & 0x80) | -- N: Negative
-        (self._p_nz & 0xff ~= 0 ? 0 : 2) |  -- Z: Zero
-        self._p_c |                         -- C: Carry
-        (self._p_v ~= 0 ? 0x40 : 0) |       -- V: Overflow
-        self._p_i |                         -- I: Inerrupt
-        self._p_d |                         -- D: Decimal
-        0x20
-        --]]
 end
 
 function CPU:flags_unpack(f)
@@ -433,11 +362,8 @@ end
 
 ------ storers ------
 function CPU:store_mem()
-    --print(self.clk)
     self:store(self.addr, self.data)
-    --print(self.clk)
     self.clk = self.clk + CLK[1]
-    --print(self.clk)
 end
 
 function CPU:store_zpg()
@@ -446,10 +372,9 @@ end
 
 ------ stack management ------
 function CPU:push8(data)
-    self.ram[0x0100 + self._sp] = data
-    self._sp = band((self._sp - 1), 0xff)
-    --printf("push8")
-    --printf("%X",self._sp)
+    local sp = self._sp
+    self.ram[0x0100 + sp] = data
+    self._sp = band(sp - 1, 0xff)
 end
 
 function CPU:push16(data)
@@ -458,22 +383,13 @@ function CPU:push16(data)
 end
 
 function CPU:pull8()
-    --printf("pull8")
-    --printf("%X",self._sp)
     self._sp = band(self._sp + 1, 0xff)
-    --printf("%X",self._sp)
-    --printf("%02X",0x0100 + self._sp)
     return self.ram[0x0100 + self._sp]
 end
 
 function CPU:pull16()
     local x = self:pull8()
     local b = self:pull8()
-    --[[
-    print("pull")
-      printf("%X",x)
-      printf("%X",b)
-      ]]
     return x + 256 * b
 end
 
@@ -483,7 +399,6 @@ end
 -- immediate addressing (read only)
 function CPU:imm(_read, _write)
     self.data = self:fetch(self._pc)
-    --printf( "%02X" ,self._pc)
     self._pc = self._pc + 1
     self.clk = self.clk + CLK[2]
 end
@@ -525,26 +440,15 @@ end
 function CPU:abs(read, write)
     self.addr = self:peek16(self._pc)
     self._pc = self._pc + 2
-    --print(self.clk)
     self.clk = self.clk + CLK[3]
-    --print(self.clk)
     return self:read_write(read, write)
 end
 
 -- absolute indexed addressing
 function CPU:abs_reg(indexed, read, write)
     local addr = self._pc + 1
-    --printf("pc:%02X", self._pc)
     local i = indexed + self:fetch(self._pc)
-    --[[
-  printf("addr:%02X", self.addr)
-  printf("idxd:%02X", indexed)
-  printf("postpc:%02X", self._pc)
-  printf("i:%02X", i)
-  printf("laddr:%02X", addr)
-  ]]
     self.addr = band(lshift(self:fetch(addr), 8) + i, 0xffff)
-    --printf("postaddr%02X", self.addr)
     if write then
         addr = band(self.addr - band(i, 0x100), 0xffff)
         self:fetch(addr)
@@ -557,7 +461,6 @@ function CPU:abs_reg(indexed, read, write)
             self.clk = self.clk + CLK[1]
         end
     end
-    --printf("%02X", addr)
     self:read_write(read, write)
     self._pc = self._pc + 2
 end
@@ -582,15 +485,16 @@ end
 function CPU:ind_y(read, write)
     local addr = self:fetch(self._pc)
     self._pc = self._pc + 1
-    local indexed = self.ram[addr] + self._y
+    local ram = self.ram
+    local indexed = ram[addr] + self._y
     self.clk = self.clk + CLK[4]
     if write then
         self.clk = self.clk + CLK[1]
-        self.addr = lshift(self.ram[band(addr + 1, 0xff)], 8) + indexed
+        self.addr = lshift(ram[band(addr + 1, 0xff)], 8) + indexed
         addr = self.addr - band(indexed, 0x100) -- for inlining fetch
         self:fetch(addr)
     else
-        self.addr = band(lshift(self.ram[band(addr + 1, 0xff)], 8) + indexed, 0xffff)
+        self.addr = band(lshift(ram[band(addr + 1, 0xff)], 8) + indexed, 0xffff)
         if band(indexed, 0x100) ~= 0 then
             addr = band(self.addr - 0x100, 0xffff) -- for inlining fetch
             self:fetch(addr)
@@ -621,17 +525,13 @@ end
 
 -- load instructions
 function CPU:_lda()
-    --printf("%02X",self.data)
     self._p_nz = self.data
     self._a = self.data
 end
 
 function CPU:_ldx()
-    --printf("%02X",self.data)
     self._p_nz = self.data
     self._x = self.data
-    --printf("%02X",self._x)
-    --printf("%02X",self._p_nz)
 end
 
 function CPU:_ldy()
@@ -645,10 +545,7 @@ function CPU:_sta()
 end
 
 function CPU:_stx()
-    --print(self._x)
-    --print(self.data)
     self.data = self._x
-    --printf("%02X",self.ram[0x07ff])
 end
 
 function CPU:_sty()
@@ -658,26 +555,30 @@ end
 -- transfer instructions
 function CPU:_tax()
     self.clk = self.clk + CLK[2]
-    self._x = self._a
-    self._p_nz = self._a
+    local a = self._a
+    self._x = a
+    self._p_nz = a
 end
 
 function CPU:_tay()
     self.clk = self.clk + CLK[2]
-    self._y = self._a
-    self._p_nz = self._a
+    local a = self._a
+    self._y = a
+    self._p_nz = a
 end
 
 function CPU:_txa()
     self.clk = self.clk + CLK[2]
-    self._a = self._x
-    self._p_nz = self._x
+    local x = self._x
+    self._a = x
+    self._p_nz = x
 end
 
 function CPU:_tya()
     self.clk = self.clk + CLK[2]
-    self._a = self._y
-    self._p_nz = self._y
+    local y = self._y
+    self._a = y
+    self._p_nz = y
 end
 
 -- flow control instructions
@@ -704,8 +605,6 @@ end
 
 function CPU:_rts()
     local x = self:pull16()
-    --printf("rts")
-    --printf("%X04",x)
     self._pc = band(x + 1, 0xffff)
     self.clk = self.clk + CLK[6]
 end
@@ -716,7 +615,7 @@ function CPU:_rti()
     self._pc = self:pull16()
     self:flags_unpack(packed)
     if self.irq_flags == 0 or self._p_i ~= 0 then
-        self.clk_irq = CPU.FOREVER_CLOCK
+        self.clk_irq = FOREVER_CLOCK
     else
         self.clk_target = 0
         self.clk_irq = 0
@@ -758,7 +657,7 @@ end
 -- math operations
 function CPU:_adc()
     local tmp = self._a + self.data + self._p_c
-    self._p_v = band(bnot(bxor(self._a, self.data)), band(bxor(self._a, tmp), 0x80))
+    self._p_v = band(bnot(bxor(self._a, self.data)), bxor(self._a, tmp), 0x80)
     self._a = band(tmp, 0xff)
     self._p_nz = self._a
     self._p_c = nthBitIsSetInt(tmp, 8)
@@ -767,7 +666,7 @@ end
 function CPU:_sbc()
     local data = bxor(self.data, 0xff)
     local tmp = self._a + data + self._p_c
-    self._p_v = band(bnot(bxor(self._a, data)), band(bxor(self._a, tmp), 0x80))
+    self._p_v = band(bnot(bxor(self._a, data)), bxor(self._a, tmp), 0x80)
     self._a = band(tmp, 0xff)
     self._p_nz = self._a
     self._p_c = nthBitIsSetInt(tmp, 8)
@@ -790,7 +689,7 @@ function CPU:_eor()
 end
 
 function CPU:_bit()
-    self._p_nz = bor((band(self.data, self._a) ~= 0 and 1 or 0), lshift(band(self.data, 0x80), 1))
+    self._p_nz = bor(band(self.data, self._a) ~= 0 and 1 or 0, lshift(band(self.data, 0x80), 1))
     self._p_v = band(self.data, 0x40)
 end
 
@@ -906,9 +805,9 @@ function CPU:_sei()
     self.clk = self.clk + CLK[2]
     if self._p_i == 0 then
         self._p_i = 0x04
-        self.clk_irq = CPU.FOREVER_CLOCK
+        self.clk_irq = FOREVER_CLOCK
         if self.irq_flags ~= 0 then
-            self:do_isr(CPU.IRQ_VECTOR)
+            self:do_isr(IRQ_VECTOR)
         end
     end
 end
@@ -957,8 +856,8 @@ function CPU:_plp()
                 self.clk_target = clk
             end
         elseif i < self._p_i then
-            self.clk_irq = CPU.FOREVER_CLOCK
-            self:do_isr(CPU.IRQ_VECTOR)
+            self.clk_irq = FOREVER_CLOCK
+            self:do_isr(IRQ_VECTOR)
         end
     end
 end
@@ -972,8 +871,6 @@ end
 function CPU:_txs()
     self.clk = self.clk + CLK[2]
     self._sp = self._x
-    --printf("txs")
-    --printf("%X04",self._sp)
 end
 
 -- undocumented instructions, rarely used
@@ -1013,8 +910,6 @@ end
 
 function CPU:_las()
     self._sp = band(self._sp, self.data)
-    --printf("las")
-    --printf("%X04",self._sp)
     self._x = self._sp
     self._p_nz = self._x
     self._a = self._x
@@ -1041,35 +936,9 @@ function CPU:_rla()
 end
 
 function CPU:_rra()
-    --[[
-      local p = 0x647
-      local ad = self.addr
-      local pc = self._p_c
-      self.addr = p
-      local c = lshift(self._p_c ,7)
-      self._p_c = band(self.data , 1)
-      self.data = bor(rshift(self.data ,1), c)
-      printf("%02X", self.addr)
-      printf("%02X", self:fetch(self.addr))
-      printf("%02X", c)
-      printf("%02X", self.data)
-      printf("%02X", self._p_c)
-      printf("%02X", self.data)
-      self.addr = ad
-      self._p_c = p
-      ]]
     local c = lshift(self._p_c, 7)
     self._p_c = band(self.data, 1)
     self.data = bor(rshift(self.data, 1), c)
-    --[[
-      printf("%02X", self.addr)
-      printf("%02X", self.addr)
-      printf("%02X", self:fetch(self.addr))
-      printf("%02X", c)
-      printf("%02X", self.data)
-      printf("%02X", self._p_c)
-      printf("%02X", self.data)
-      ]]
     return self:_adc()
 end
 
@@ -1090,8 +959,6 @@ end
 
 function CPU:_shs()
     self._sp = band(self._a, self._x)
-    --printf("shs")
-    --printf("%X04",self._sp)
     self.data = band(self._sp, (rshift(self.addr, 8) + 1))
 end
 
@@ -1130,7 +997,7 @@ function CPU:_brk()
     data = bor(self:flags_pack(), 0x10)
     self:push8(data)
     self._p_i = 0x04
-    self.clk_irq = CPU.FOREVER_CLOCK
+    self.clk_irq = FOREVER_CLOCK
     self.clk = self.clk + CLK[7]
     local addr = self:fetch_irq_isr_vector() -- for inlining peek16
     self._pc = self:peek16(addr)
@@ -1142,8 +1009,8 @@ function CPU:_jam()
     if not self.jammed then
         self.jammed = true
         -- interrupt reset
-        self.clk_nmi = CPU.FOREVER_CLOCK
-        self.clk_irq = CPU.FOREVER_CLOCK
+        self.clk_nmi = FOREVER_CLOCK
+        self.clk_irq = FOREVER_CLOCK
         self.irq_flags = 0
     end
 end
@@ -1163,7 +1030,7 @@ function CPU:printState(doFetch)
             self.opcode or 0,
             doFetch and self:fetch(self._pc + 1) or -1,
             doFetch and self:fetch(self._pc + 2) or -1,
-            table.concat(CPU.DISPATCH[self.opcode] or {}, " "),
+            table.concat(DISPATCH[self.opcode] or {}, " "),
             self.data,
             self.addr,
             self._a,
@@ -1185,7 +1052,7 @@ function CPU:printState(doFetch)
             self.opcode or 0,
             doFetch and self:fetch(self._pc + 1) or -1,
             doFetch and self:fetch(self._pc + 2) or -1,
-            table.concat(CPU.DISPATCH[self.opcode] or {}, " "),
+            table.concat(DISPATCH[self.opcode] or {}, " "),
             self.data,
             self.addr,
             self._a,
@@ -1233,60 +1100,43 @@ end
 function CPU:do_clock()
     local ticks = self.apu:do_clock()
     local clock = math.min(ticks, self.clk_frame)
-    --print "do clock"
-    --print(clock)
-    --printf("%04X", clock)
-
-    --[[
-    printf("%04X", clock)
-    printf("%04X", self.clk_nmi)
-    printf("%04X", self.clk_irq)
-    print(self.clk < self.clk_nmi)
-    print(self.clk < self.clk_irq)
-    ]]
-    --print "cpu do clock"
     if self.clk < self.clk_nmi then
         clock = math.min(clock, self.clk_nmi)
         if self.clk < self.clk_irq then
             clock = math.min(clock, self.clk_irq)
         else
-            --print "cpu do isr irq"
-            self.clk_irq = CPU.FOREVER_CLOCK
-            self:do_isr(CPU.IRQ_VECTOR)
+            self.clk_irq = FOREVER_CLOCK
+            self:do_isr(IRQ_VECTOR)
         end
     else
-        --print "cpu do isr nmi"
-        self.clk_nmi = CPU.FOREVER_CLOCK
-        self.clk_irq = CPU.FOREVER_CLOCK
-        self:do_isr(CPU.NMI_VECTOR)
+        self.clk_nmi = FOREVER_CLOCK
+        self.clk_irq = FOREVER_CLOCK
+        self:do_isr(NMI_VECTOR)
     end
-    --print(self.clk)
     self.clk_target = clock
 end
 local asd = 0
 function CPU:run_once()
     self.opcode = self:fetch(self._pc)
+    --[[
     if self.conf.loglevel >= 3 then
         self:printState(true)
-    --[[
             self.conf.debug(string.format("PC:%04X A:%02X X:%02X Y:%02X P:%02X SP:%02X CYC:%3d : OPCODE:%02X (%d, %d)" ,
               self._pc, self._a, self._x, self._y, self:flags_pack(), self._sp, self.clk / 4 % 341, self.opcode, self.cl
-            ))]]
+            ))
     end
-
+    --]]
     self._pc = self._pc + 1
 
     --[[
-    CPU.DISPATCHER[self.opcode](self)
+    DISPATCHER[self.opcode](self)
     ]]
-    local operationData = CPU.DISPATCH[self.opcode]
-    local f = operationData[1]
-    self[f](self, unpack(operationData, 2))
-    --print(self.clk)
+    local operationData = DISPATCH[self.opcode]
+    self[operationData[1]](self, unpack(operationData, 2))
     if self.ppu_sync then
         self.ppu:sync(self.clk)
     end
-    --print(self.clk)
+    --[[
     asd = asd + 1
     if asd > 350000000 then
         if asdasdsssasd then
@@ -1295,31 +1145,16 @@ function CPU:run_once()
         end
         error "asd"
     end
+    ]]
 end
 function CPU:run()
-    --print "run"
-    --print(0xfffc)
-    --print(self._pc)
     self:do_clock()
     repeat
         repeat
-            self:run_once() --[[
-            printf("STEP1")
-            printf("%04X", self.clk)
-            printf("%04X", self.clk_target)
-            printf("%04X", self.clk_frame)
-            ]]
+            self:run_once()
         until not (self.clk < self.clk_target)
-        --[[
-        printf("STEP2")
-        printf("%04X", self.clk_target)
-        ]]
         self:do_clock()
     until not (self.clk < self.clk_frame)
-    --[[
-    printf("STEP3")
-    printf("%04X", self.clk_frame)
-    ]]
 end
 
 CPU.ADDRESSING_MODES = {
@@ -1329,6 +1164,7 @@ CPU.ADDRESSING_MODES = {
     uno = {"ind_x", "zpg", "imm", "abs", "ind_y", "zpg_y", "abs_y", "abs_y"}
 }
 CPU.DISPATCH = {}
+DISPATCH = CPU.DISPATCH
 
 -- add an op/instruction
 -- opcodes is a table or a single intruction code
@@ -1350,7 +1186,7 @@ local function op(opcodes, args)
         else
             send_args = {args}
         end
-        CPU.DISPATCH[opcode] = send_args
+        DISPATCH[opcode] = send_args
     end
 end
 
@@ -1463,7 +1299,7 @@ op({0x1c, 0x3c, 0x5c, 0x7c, 0xdc, 0xfc}, {"r_op", "_nop", "ctl"})
 op({0x00}, "_brk")
 op({0x02, 0x12, 0x22, 0x32, 0x42, 0x52, 0x62, 0x72, 0x92, 0xb2, 0xd2, 0xf2}, "_jam")
 --[[
-  Thiss aims to "cache" unpack (Maybe also "cache" self and op indexing?)
+  --This aims to "cache" unpack (Maybe also "cache" self and op indexing?)
 CPU.DISPATCHER = {}
 for k, v in pairs(CPU.DISPATCH) do
   local op = v[1]

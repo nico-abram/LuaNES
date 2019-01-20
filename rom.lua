@@ -1,4 +1,13 @@
 local serpent = require("libs/serpent")
+
+local band, bor, bxor, bnot, lshift, rshift = bit.band, bit.bor, bit.bxor, bit.bnot, bit.lshift, bit.rshift
+local map, rotatePositiveIdx, nthBitIsSet, nthBitIsSetInt, range, concat0 =
+    UTILS.map,
+    UTILS.rotatePositiveIdx,
+    UTILS.nthBitIsSet,
+    UTILS.nthBitIsSetInt,
+    UTILS.range
+
 ROM = {}
 local ROM = ROM
 ROM._mt = {__index = ROM}
@@ -11,8 +20,6 @@ ROM._mt = {__index = ROM}
 ROM.MAPPER_DB = {
     [0x00] = ROM
 }
-
-UTILS:import()
 
 function ROM:initialize(conf, cpu, ppu, basename, bytes, str)
     self.conf = conf or {}
@@ -38,7 +45,7 @@ function ROM:initialize(conf, cpu, ppu, basename, bytes, str)
             error "EOF in ROM bank data"
         end
         for i = 1, prg_count do
-            self.prg_banks[i] = copy(bytes, prg_bank_size, idx)
+            self.prg_banks[i] = UTILS.copy(bytes, prg_bank_size, idx)
             idx = idx + prg_bank_size
         end
     end
@@ -50,34 +57,26 @@ function ROM:initialize(conf, cpu, ppu, basename, bytes, str)
             error "EOF in CHR bank data"
         end
         for i = 1, chr_count do
-            self.chr_banks[i] = copy(bytes, chr_bank_size, idx)
+            self.chr_banks[i] = UTILS.copy(bytes, chr_bank_size, idx)
             idx = idx + chr_bank_size
         end
     end
     self.prg_ref = {}
-    fill(self.prg_ref, 0, 0x10000)
+    UTILS.fill(self.prg_ref, 0, 0x10000)
     for i = 0x8000 + 1, 0x4000 + 0x8000 do
         self.prg_ref[i] = self.prg_banks[1][i - 0x8000]
     end
     for i = 0xc000 + 1, 0x4000 + 0xc000 do
         self.prg_ref[i] = self.prg_banks[#(self.prg_banks)][i - 0xc000]
     end
-    --[[
-    UTILS.print("rominit")
-    UTILS.printf("%04x", self.prg_ref[0xfffd])
-    UTILS.printf("%04x", self.prg_ref[0xfffd - 0x8000])
-    UTILS.print("rominit")
-    UTILS.print(self.prg_ref[0x8000 + 1])
-    UTILS.print(self.prg_banks[1][1])
---]]
     self.chr_ram = chr_count == 0 -- No CHR bank implies CHR-RAM (writable CHR bank)
-    self.chr_ref = self.chr_ram and (fill({}, 0, 0x2000)) or copy(self.chr_banks[1])
+    self.chr_ref = self.chr_ram and (UTILS.fill({}, 0, 0x2000)) or UTILS.copy(self.chr_banks[1])
 
     self.wrk_readable = wrk_count > 0
     self.wrk_writable = false
     self.wrk =
         wrk_count > 0 and
-        map(
+        UTILS.map(
             range(0x6000, 0x7fff),
             function(n)
                 return rshift(n, 8)
@@ -89,31 +88,13 @@ function ROM:initialize(conf, cpu, ppu, basename, bytes, str)
 
     self.ppu.nametables = self.mirroring
     self.ppu:set_chr_mem(self.chr_ref, self.chr_ram)
-    --[[
-    UTILS.print(#(self.chr_ref))
-    UTILS.print(#(self.chr_banks))
-    UTILS.print(#(self.prg_ref))
-    UTILS.print((self.chr_ref[1]))
-    UTILS.print(#(self.chr_banks[1]))
-    UTILS.print((self.prg_ref[1]))
-    --]]
 end
 
 function ROM:init()
 end
 
 function ROM:reset()
-    self.cpu:add_mappings(range(0x8000, 0xffff), tGetter(self.prg_ref), CPU.UNDEFINED)
-end
-
-function ROM:inspect()
-    return ""
-    --[[{}
-        "Mapper: #{ self.mapper } (#{ self.class.to_s.split("::").last })",
-        "PRG Banks: #{ self.prg_banks.size }",
-        "CHR Banks: #{ self.chr_banks.size }",
-        "Mirroring: #{ self.mirroring }",
-    }.join("\n")]]
+    self.cpu:add_mappings(range(0x8000, 0xffff), UTILS.tGetter(self.prg_ref), CPU.UNDEFINED)
 end
 
 function ROM:peek_6000(addr)
@@ -134,7 +115,6 @@ function ROM:load_battery()
         return
     end
     local sav = self.basename + ".sav"
-    --return unless File.readable?(sav)
     self.wrk.replace(sav.bytes)
     local inp = assert(io.open(sav, "rb"))
     self.wrk = serpent.load(inp:read("*all"))
@@ -172,8 +152,6 @@ function ROM.load(conf, cpu, ppu)
     end
     local mapper = bor(rshift(blob[7], 4), band(blob[8], 0xf0))
 
-    --print "amper"
-    --print(mapper)
     local klass = ROM.MAPPER_DB[mapper]
     if not klass then
         error(string.format("Unsupported mapper type 0x%02x", mapper))
@@ -231,7 +209,7 @@ function UxROM:new(...)
     return rom
 end
 function UxROM:reset()
-    self.cpu.add_mappings(range(0x8000, 0xffff), tGetter(self.prg_ref), bind(self.poke_8000, self))
+    self.cpu.add_mappings(range(0x8000, 0xffff), UTILS.tGetter(self.prg_ref), bind(self.poke_8000, self))
 end
 
 function UxROM:poke_8000(_addr, data)
@@ -253,7 +231,7 @@ end
 function CNROM:reset()
     self.cpu.add_mappings(
         range(0x8000, 0xffff),
-        tGetter(self.prg_ref),
+        UTILS.tGetter(self.prg_ref),
         self.chr_ram and bind(self.poke_8000, self) or CPU.UNDEFINED
     )
 end
@@ -295,7 +273,7 @@ function MMC1:reset()
     self.wrk_readable = true
     self.wrk_writable = true
     self.cpu.add_mappings(range(0x6000, 0x7fff), bind(self.peek_6000, self), bind(self.poke_6000, self))
-    self.cpu.add_mappings(range(0x8000, 0xffff), tGetter(self.prg_ref), bind(self.poke_prg, self))
+    self.cpu.add_mappings(range(0x8000, 0xffff), UTILS.tGetter(self.prg_ref), bind(self.poke_prg, self))
 
     self:update_nmt("horizontal")
     self:update_prg("fix_last", 0, 0)
@@ -417,7 +395,7 @@ function MMC3:init(rev) -- rev = :A or :B or :C
     self.prg_bank_swap = false
 
     self.chr_banks = self.chr_banks.flatten.each_slice(0x0400).to_a
-    self.chr_bank_mapping = fill({}, nil, 8)
+    self.chr_bank_mapping = UTILS.fill({}, nil, 8)
     self.chr_bank_swap = false
 end
 
@@ -427,7 +405,7 @@ function MMC3:reset()
 
     local poke_a000 = self.mirroring ~= "FourScreen" and bind(self.poke_a000, self) or CPU.UNDEFINED
     self.cpu.add_mappings(range(0x6000, 0x7fff), bind(self.peek_6000, self), bind(self.poke_6000, self))
-    local g = tGetter(self.prg_ref)
+    local g = UTILS.tGetter(self.prg_ref)
     self.cpu.add_mappings(range(0x8000, 0x9fff, 2), g, bind(self.poke_8000, self))
     self.cpu.add_mappings(range(0x8001, 0x9fff, 2), g, bind(self.poke_8001, self))
     self.cpu.add_mappings(range(0xa000, 0xbfff, 2), g, poke_a000)
@@ -444,7 +422,6 @@ function MMC3:reset()
     for i = 0, 7 do
         self:update_chr(i * 0x400, i)
     end
-    --8.times {|i| update_chr(i * 0x400, i) }
 
     self.clock = 0
     if PPU then

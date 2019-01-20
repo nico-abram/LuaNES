@@ -1,3 +1,12 @@
+local band, bor, bxor, bnot, lshift, rshift = bit.band, bit.bor, bit.bxor, bit.bnot, bit.lshift, bit.rshift
+local map, rotatePositiveIdx, nthBitIsSet, nthBitIsSetInt, range, concat0 =
+  UTILS.map,
+  UTILS.rotatePositiveIdx,
+  UTILS.nthBitIsSet,
+  UTILS.nthBitIsSetInt,
+  UTILS.range,
+  UTILS.concat0
+
 APU = {}
 local APU = APU
 APU._mt = {__index = APU}
@@ -9,7 +18,6 @@ local NES =
     RP2A03_CC = 12,
     FOREVER_CLOCK = 0xffffffff
   }
-UTILS:import()
 APU.CLK_M2_MUL = 6
 APU.CLK_NTSC = 39375000 * APU.CLK_M2_MUL
 APU.CLK_NTSC_DIV = 11
@@ -18,7 +26,7 @@ APU.CHANNEL_OUTPUT_MUL = 256
 APU.CHANNEL_OUTPUT_DECAY = APU.CHANNEL_OUTPUT_MUL / 4 - 1
 
 APU.FRAME_CLOCKS =
-  map(
+  UTILS.map(
   {29830, 1, 1, 29828},
   function(n)
     return CPU.RP2A03_CC * n
@@ -31,7 +39,7 @@ APU.OSCILLATOR_CLOCKS =
     {7458, 7456, 7458, 7458 + 7452}
   },
   function(a)
-    return map(
+    return UTILS.map(
       a,
       function(n)
         return CPU.RP2A03_CC * n
@@ -49,7 +57,7 @@ function APU:initialize(conf, cpu, rate, bits)
   self.conf = conf
   self.cpu = cpu
   rate = rate or 44100
-  bits = bits or 16
+  bits = bits or 8
 
   self.pulse_0, self.pulse_1 = Pulse:new(self), Pulse:new(self)
   self.triangle = Triangle:new(self)
@@ -124,25 +132,25 @@ function APU:reset_mapping()
   self.triangle:update_settings(rate, fixed)
   self.noise:update_settings(rate, fixed)
 
-  self.cpu:add_mappings(0x4000, bind(self.peek_40xx, self), bind(self.pulse_0.poke_0, self.pulse_0))
-  self.cpu:add_mappings(0x4001, bind(self.peek_40xx, self), bind(self.pulse_0.poke_1, self.pulse_0))
-  self.cpu:add_mappings(0x4002, bind(self.peek_40xx, self), bind(self.pulse_0.poke_2, self.pulse_0))
-  self.cpu:add_mappings(0x4003, bind(self.peek_40xx, self), bind(self.pulse_0.poke_3, self.pulse_0))
-  self.cpu:add_mappings(0x4004, bind(self.peek_40xx, self), bind(self.pulse_1.poke_0, self.pulse_1))
-  self.cpu:add_mappings(0x4005, bind(self.peek_40xx, self), bind(self.pulse_1.poke_1, self.pulse_1))
-  self.cpu:add_mappings(0x4006, bind(self.peek_40xx, self), bind(self.pulse_1.poke_2, self.pulse_1))
-  self.cpu:add_mappings(0x4007, bind(self.peek_40xx, self), bind(self.pulse_1.poke_3, self.pulse_1))
-  self.cpu:add_mappings(0x4008, bind(self.peek_40xx, self), bind(self.triangle.poke_0, self.triangle))
-  self.cpu:add_mappings(0x400a, bind(self.peek_40xx, self), bind(self.triangle.poke_2, self.triangle))
-  self.cpu:add_mappings(0x400b, bind(self.peek_40xx, self), bind(self.triangle.poke_3, self.triangle))
-  self.cpu:add_mappings(0x400c, bind(self.peek_40xx, self), bind(self.noise.poke_0, self.noise))
-  self.cpu:add_mappings(0x400e, bind(self.peek_40xx, self), bind(self.noise.poke_2, self.noise))
-  self.cpu:add_mappings(0x400f, bind(self.peek_40xx, self), bind(self.noise.poke_3, self.noise))
-  self.cpu:add_mappings(0x4010, bind(self.peek_40xx, self), bind(self.dmc.poke_0, self.dmc))
-  self.cpu:add_mappings(0x4011, bind(self.peek_40xx, self), bind(self.dmc.poke_1, self.dmc))
-  self.cpu:add_mappings(0x4012, bind(self.peek_40xx, self), bind(self.dmc.poke_2, self.dmc))
-  self.cpu:add_mappings(0x4013, bind(self.peek_40xx, self), bind(self.dmc.poke_3, self.dmc))
-  self.cpu:add_mappings(0x4015, bind(self.peek_4015, self), bind(self.poke_4015, self))
+  self.cpu:add_mappings(0x4000, UTILS.bind(self.peek_40xx, self), UTILS.bind(self.pulse_0.poke_0, self.pulse_0))
+  self.cpu:add_mappings(0x4001, UTILS.bind(self.peek_40xx, self), UTILS.bind(self.pulse_0.poke_1, self.pulse_0))
+  self.cpu:add_mappings(0x4002, UTILS.bind(self.peek_40xx, self), UTILS.bind(self.pulse_0.poke_2, self.pulse_0))
+  self.cpu:add_mappings(0x4003, UTILS.bind(self.peek_40xx, self), UTILS.bind(self.pulse_0.poke_3, self.pulse_0))
+  self.cpu:add_mappings(0x4004, UTILS.bind(self.peek_40xx, self), UTILS.bind(self.pulse_1.poke_0, self.pulse_1))
+  self.cpu:add_mappings(0x4005, UTILS.bind(self.peek_40xx, self), UTILS.bind(self.pulse_1.poke_1, self.pulse_1))
+  self.cpu:add_mappings(0x4006, UTILS.bind(self.peek_40xx, self), UTILS.bind(self.pulse_1.poke_2, self.pulse_1))
+  self.cpu:add_mappings(0x4007, UTILS.bind(self.peek_40xx, self), UTILS.bind(self.pulse_1.poke_3, self.pulse_1))
+  self.cpu:add_mappings(0x4008, UTILS.bind(self.peek_40xx, self), UTILS.bind(self.triangle.poke_0, self.triangle))
+  self.cpu:add_mappings(0x400a, UTILS.bind(self.peek_40xx, self), UTILS.bind(self.triangle.poke_2, self.triangle))
+  self.cpu:add_mappings(0x400b, UTILS.bind(self.peek_40xx, self), UTILS.bind(self.triangle.poke_3, self.triangle))
+  self.cpu:add_mappings(0x400c, UTILS.bind(self.peek_40xx, self), UTILS.bind(self.noise.poke_0, self.noise))
+  self.cpu:add_mappings(0x400e, UTILS.bind(self.peek_40xx, self), UTILS.bind(self.noise.poke_2, self.noise))
+  self.cpu:add_mappings(0x400f, UTILS.bind(self.peek_40xx, self), UTILS.bind(self.noise.poke_3, self.noise))
+  self.cpu:add_mappings(0x4010, UTILS.bind(self.peek_40xx, self), UTILS.bind(self.dmc.poke_0, self.dmc))
+  self.cpu:add_mappings(0x4011, UTILS.bind(self.peek_40xx, self), UTILS.bind(self.dmc.poke_1, self.dmc))
+  self.cpu:add_mappings(0x4012, UTILS.bind(self.peek_40xx, self), UTILS.bind(self.dmc.poke_2, self.dmc))
+  self.cpu:add_mappings(0x4013, UTILS.bind(self.peek_40xx, self), UTILS.bind(self.dmc.poke_3, self.dmc))
+  self.cpu:add_mappings(0x4015, UTILS.bind(self.peek_4015, self), UTILS.bind(self.poke_4015, self))
   self.frame_irq_clock = (self.frame_counter / self.fixed_clock) - CPU.CLK[1]
 end
 
@@ -189,8 +197,7 @@ function APU:clock_dma(clk)
 end
 
 function APU:update(target)
-  target = target or self.cpu:update()
-  target = target * self.fixed_clock
+  target = (target or self.cpu:update()) * self.fixed_clock
   self:proceed(target)
   if self.frame_counter < target then
     return self:clock_frame_counter()
@@ -203,7 +210,6 @@ end
 
 function APU:update_delta()
   local elapsed = self.cpu:update()
-  --TODO
   local delta = self.frame_counter ~= elapsed * self.fixed_clock
   self:update(elapsed + 1)
   return delta
@@ -222,7 +228,6 @@ function APU:vsync()
   self.frame_counter = self.frame_counter - frame
 end
 
---##########################################################################
 -- helpers
 
 function APU:clock_oscillators(two_clocks)
@@ -264,6 +269,11 @@ function APU:clock_frame_irq(target)
 end
 
 function APU:flush_sound()
+  -- Since sound isn't used yet there's no need to waste cpu cycles
+  -- TODO
+  do
+    return
+  end
   if #self.buffer < self.settings_rate / 60 then
     local target = self.cpu:current_clock() * self.fixed_clock
     self:proceed(target)
@@ -272,7 +282,7 @@ function APU:flush_sound()
         self:clock_frame_counter()
       end
       while #self.buffer < self.settings_rate / 60 do
-        self.buffer[#(self.buffer) + 1] = self.mixer.sample
+        self.buffer[#(self.buffer) + 1] = self.mixer:sample()
       end
     end
   end
@@ -284,7 +294,7 @@ end
 
 function APU:proceed(target)
   while self.rate_counter < target and #self.buffer < self.settings_rate / 60 do
-    self.buffer[#(self.buffer) + 1] = self.mixer.sample
+    self.buffer[#(self.buffer) + 1] = self.mixer:sample()
     if self.frame_counter <= self.rate_counter then
       self:clock_frame_counter()
     end
@@ -292,7 +302,6 @@ function APU:proceed(target)
   end
 end
 
---##########################################################################
 -- mapped memory handlers
 
 -- Control
@@ -336,15 +345,15 @@ function APU:poke_4017(_addr, data)
     clock_frame_irq(n)
   end
   n = n + CPU.CLK[1]
-  self.oscillator_clocks = APU.OSCILLATOR_CLOCKS[nthBitIsSetInt( data,7) + 1]
+  self.oscillator_clocks = APU.OSCILLATOR_CLOCKS[nthBitIsSetInt(data, 7) + 1]
   self.frame_counter = (n + self.oscillator_clocks[1]) * self.fixed_clock
   self.frame_divider = 0
   self.frame_irq_clock = (band(data, 0xc0) ~= 0) and CPU.FOREVER_CLOCK or (n + APU.FRAME_CLOCKS[1])
   self.frame_irq_repeat = 0
-  if nthBitIsSetInt( data,6) ~= 0 then
+  if nthBitIsSetInt(data, 6) ~= 0 then
     self.cpu:clear_irq(CPU.IRQ_FRAME)
   end
-  if nthBitIsSetInt( data,7) ~= 0 then
+  if nthBitIsSetInt(data, 7) ~= 0 then
     self:clock_oscillators(true)
   end
 end
@@ -482,9 +491,10 @@ function MIXER:reset()
 end
 
 function MIXER:sample()
-  local dac0 = self.pulse_0.sample + self.pulse_1.sample
-  local dac1 = self.triangle.sample + self.noise.sample + self.dmc.sample
-  local sample = (P_0 * dac0 / (P_1 + P_2 * dac0)) + (TND_0 * dac1 / (TND_1 + TND_2 * dac1))
+  local dac0 = self.pulse_0:sample() + self.pulse_1:sample()
+  local dac1 = self.triangle:sample() + self.noise:sample() + self.dmc:sample()
+  local sample =
+    (MIXER.P_0 * dac0 / (MIXER.P_1 + MIXER.P_2 * dac0)) + (MIXER.TND_0 * dac1 / (MIXER.TND_1 + MIXER.TND_2 * dac1))
 
   self.acc = self.acc - self.prev
   self.prev = lshift(sample, 15)
@@ -593,12 +603,12 @@ Pulse = UTILS.class(Oscillator)
 local Pulse = Pulse
 Pulse.MIN_FREQ = 0x0008
 Pulse.MAX_FREQ = 0x07ff
---Pulse.WAVE_FORM = map{0b11111101, 0b11111001, 0b11100001, 0b00000110},function(n) return map(range(0,7), function(i) return n[i] * 0x1f } end))
+--Pulse.WAVE_FORM = map{0b11111101, 0b11111001, 0b11100001, 0b00000110},function(n) return UTILS.map(range(0,7), function(i) return n[i] * 0x1f } end))
 Pulse.WAVE_FORM =
-  map(
+  UTILS.map(
   {0xFD, 0xF9, 0xE1, 0x06},
   function(n)
-    return map(
+    return UTILS.map(
       range(0, 7),
       function(i)
         return nthBitIsSetInt(n, i) * 0x1f
@@ -651,10 +661,10 @@ end
 
 function Pulse:poke_1(_addr, data)
   self.apu:update()
-  self.sweep_increase = nthBitIsSetInt( data,3) ~= 0 and 0 or -1
+  self.sweep_increase = nthBitIsSetInt(data, 3) ~= 0 and 0 or -1
   self.sweep_shift = band(data, 0x07)
   self.sweep_rate = 0
-  if nthBitIsSetInt( data,7) == 1 and self.sweep_shift > 0 then
+  if nthBitIsSetInt(data, 7) == 1 and self.sweep_shift > 0 then
     self.sweep_rate = band(rshift(data, 4), 0x07) + 1
     self.sweep_reload = true
   end
@@ -699,7 +709,7 @@ function Pulse:sample()
   self.timer = self.timer - self.rate
   if self.is_active then
     if self.timer < 0 then
-      sum = bit.rhisft(sum, self.form[self.step])
+      sum = rshift(sum, self.form[self.step])
       repeat
         local v = -self.timer
         if v > self.freq then
@@ -730,7 +740,7 @@ end
 Triangle = UTILS.class(Oscillator)
 local Triangle = Triangle
 Triangle.MIN_FREQ = 2 + 1
-Triangle.WAVE_FORM = concat(range(0, 15), range(15, 0))
+Triangle.WAVE_FORM = concat0(range(0, 15), range(15, 0))
 
 function Triangle:initialize(_apu)
   self._parent.initialize(self, _apu)
@@ -793,14 +803,11 @@ function Triangle:sample()
     local sum = self.timer
     self.timer = self.timer - self.rate
     if self.timer < 0 then
-      sum = sum * WAVE_FORM[self.step]
+      sum = sum * Triangle.WAVE_FORM[self.step]
       repeat
-        v = -self.timer
-        if v > self.freq then
-          v = self.freq
-        end
+        local v = math.min(-(self.timer), self.freq)
         self.step = band((self.step + 1), 0x1f)
-        sum = sum + v * WAVE_FORM[self.step]
+        sum = sum + v * Triangle.WAVE_FORM[self.step]
         self.timer = self.timer + self.freq
       until not (self.timer < 0)
       self.amp = (sum * APU.CHANNEL_OUTPUT_MUL + self.rate / 2) / self.rate * 3
@@ -821,13 +828,15 @@ local Noise = Noise
 Noise.LUT = {4, 8, 16, 32, 64, 96, 128, 160, 202, 254, 380, 508, 762, 1016, 2034, 4068}
 Noise.NEXT_BITS_1, Noise.NEXT_BITS_6 =
   unpack(
-  map(
+  UTILS.map(
     {1, 6},
     function(shifter)
-      return map(
+      return UTILS.map(
         range(0, 0x7fff),
         function(bits)
-          return nthBitIsSetInt(bits, 0) == nthBitIsSetInt(bits, shifter) and bits / 2 or bits / 2 + 0x4000
+          return math.floor(
+            nthBitIsSetInt(bits, 0) == nthBitIsSetInt(bits, shifter) and (bits / 2) or (bits / 2 + 0x4000)
+          )
         end
       )
     end
@@ -838,6 +847,7 @@ function Noise:initialize(_apu)
   self._parent.initialize(self, _apu)
   self.envelope = Envelope:new()
   self.length_counter = LengthCounter:new()
+  self.bits = 0x4000
 end
 
 function Noise:reset()
@@ -850,7 +860,7 @@ end
 function Noise:poke_2(_addr, data)
   self.apu:update()
   self.freq = Noise.LUT[band(data, 0x0f) + 1] * self.fixed
-  self.shifter = nthBitIsSetInt( data,7) ~= 0 and Noise.NEXT_BITS_6 or Noise.NEXT_BITS_1
+  self.shifter = nthBitIsSetInt(data, 7) ~= 0 and Noise.NEXT_BITS_6 or Noise.NEXT_BITS_1
 end
 
 function Noise:clock_length_counter()
@@ -860,16 +870,17 @@ function Noise:clock_length_counter()
 end
 
 function Noise:sample()
+  self.bits = self.bits or 0x4000
   self.timer = self.timer - self.rate
   if self.is_active then
     if self.timer >= 0 then
-      return self.bits.even % 2 == 0 and self.envelope.output * 2 or 0
+      return self.bits % 2 == 0 and self.envelope.output * 2 or 0
     end
 
-    local sum = self.bits.even % 2 == 0 and self.timer or 0
+    local sum = self.bits % 2 == 0 and self.timer or 0
     repeat
       self.bits = self.shifter[self.bits]
-      if self.bits.even % 2 == 0 then
+      if self.bits % 2 == 0 then
         v = -self.timer
         if v > self.freq then
           v = self.freq
@@ -891,7 +902,7 @@ end
 DMC = UTILS.class()
 local DMC = DMC
 DMC.LUT =
-  map(
+  UTILS.map(
   {428, 380, 340, 320, 286, 254, 226, 214, 190, 160, 142, 128, 106, 84, 72, 54},
   function(n)
     return n * CPU.RP2A03_CC

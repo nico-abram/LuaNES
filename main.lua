@@ -3,6 +3,8 @@ Nes = nil
 local width = 256
 local height = 240
 local pixSize = 1
+local lastSource
+local sound = false
 function love.load(arg)
     --[[
     love.profiler = require("libs/profile")
@@ -34,6 +36,11 @@ function love.load(arg)
     )
     --Nes:run()
     Nes:reset()
+    love.window.setMode(width, height, {resizable = true, minwidth = width, minheight = height})
+    local samplerate = 44100
+    local bits = 16
+    local channels = 1
+    sound = love.sound.newSoundData(samplerate / 60 * 2, samplerate, bits, channels)
 end
 local keyEvents = {}
 local keyButtons = {
@@ -77,10 +84,23 @@ local function update()
     end
     keyEvents = {}
     Nes:run_once()
+    local samples = Nes.cpu.apu.output
+    --[[
+    for i = 1, #samples do
+        sound:setSample(i, (samples[i] % 256))
+    end
+    if lastSource then
+        lastSource:stop()
+    end
+    lastSource = love.audio.newSource(sound)
+    lastSource:play()
+    ]]
 end
 local function drawScreen()
-    love.graphics.draw(image, 50, 50)
-    love.graphics.print("Current FPS: " .. tostring(love.timer.getFPS()) .. " " .. tostring(fps), 10, 10)
+    local sx = love.graphics.getWidth() / image:getWidth()
+    local sy = love.graphics.getHeight() / image:getHeight()
+    love.graphics.draw(image, 0, 0, 0, sx, sy)
+    love.graphics.print("Love FPS: " .. tostring(love.timer.getFPS()) .. " Nes FPS: " .. tostring(fps), 10, 10)
 end
 local function drawPalette()
     local palette = Nes.cpu.ppu.output_color
@@ -104,7 +124,7 @@ local function draw()
     --drawPalette()
 end
 function love.draw()
-    --[
+    --[[
     time = time + love.timer.getDelta()
     timeTwo = timeTwo + love.timer.getDelta()
     if time > rate then
@@ -120,7 +140,7 @@ function love.draw()
         fpstmp = 0
     end
     --]]
-    --update()
+    update()
     --[
     local pxs = Nes.cpu.ppu.output_pixels
     for i = 1, pixelCount do
@@ -145,9 +165,7 @@ function love.draw()
         end
         --]]
         --[
-        local xx = 1 + (x)
-        local yy = 1 + (y)
-        imageData:setPixel(xx, yy, px[1], px[2], px[3], 1)
+        imageData:setPixel(x + 1, y + 1, px[1], px[2], px[3], 1)
         --]]
     end
     image:replacePixels(imageData)

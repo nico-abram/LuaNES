@@ -1,8 +1,15 @@
+local band = bit.band
+local bor = bit.bor
+local bxor = bit.bxor
+local bnot = bit.bnot
+local lshift = bit.lshift
+local rshift = bit.rshift
+
 UTILS = {}
 local UTILS = UTILS
 
 function UTILS.isDefined(v)
-    return v and v ~= CPU.UNDEFINED and v or nil
+    return (v and v ~= CPU.UNDEFINED) and v or nil
 end
 
 function UTILS.bind(f, param)
@@ -48,60 +55,63 @@ function UTILS.shiftingArray()
     local _t = {}
     local t = {}
     local shift = 0
-    setmetatable(t, {
-      __index = function (t,k)
-        return _t[UTILS.rotateIdx(_t,k+shift)]
-      end,
-      __newindex = function (t,k,v)
-        if k > #_t then
-            table.insert(_t, shift + k - #_t - 1, v)
-        else
-         _t[UTILS.rotateIdx(_t,k+shift)] = v
-        end
-      end})
-      t.rotate = function(self, newshift)
-        shift = UTILS.rotateIdx(_t,newshift + shift)
-      end
+    setmetatable(
+        t,
+        {
+            __index = function(t, k)
+                return _t[UTILS.rotateIdx(_t, k + shift)]
+            end,
+            __newindex = function(t, k, v)
+                if k > #_t then
+                    table.insert(_t, shift + k - #_t - 1, v)
+                else
+                    _t[UTILS.rotateIdx(_t, k + shift)] = v
+                end
+            end
+        }
+    )
+    t.rotate = function(self, newshift)
+        shift = UTILS.rotateIdx(_t, newshift + shift)
+    end
     return t
 end
 
 function UTILS.indexRotating(t, idx)
-    return t[UTILS.rotateIdx(t,idx)]
+    return t[UTILS.rotateIdx(t, idx)]
 end
-
 
 function UTILS.rotatePositiveIdx(t, idx, size)
     size = size or #t
-    return ((idx - 1) % size) +1
+    return ((idx - 1) % size) + 1
 end
 
 function UTILS.rotateIdx(t, idx, size)
     size = size or #t
     if idx > size then
-        return UTILS.rotateIdx(t,idx-size, size)
+        return UTILS.rotateIdx(t, idx - size, size)
     elseif idx < 1 then
-        return UTILS.rotateIdx(t, idx+size, size)
+        return UTILS.rotateIdx(t, idx + size, size)
     else
         return idx
     end
 end
 
 -- In-place
-function UTILS.rotate( array, shift ) -- Works for array with consecutive entries
+function UTILS.rotate(array, shift) -- Works for array with consecutive entries
     shift = shift or 1 -- make second arg optional, defaults to 1
-    
+
     local start = array[0] and 0 or 1
     local size = #array
 
     if shift > 0 then
-	    for i = 1, math.abs(shift) do
-	        table.insert( array, 1, table.remove( array, size ) )
-	    end
-	else
-		for i = 1, math.abs(shift) do
-	        table.insert( array, size, table.remove( array, 1 ) )
-	    end	
-	end
+        for i = 1, math.abs(shift) do
+            table.insert(array, 1, table.remove(array, size))
+        end
+    else
+        for i = 1, math.abs(shift) do
+            table.insert(array, size, table.remove(array, 1))
+        end
+    end
     return array
 end
 function UTILS.rotateNew(t, r)
@@ -112,9 +122,9 @@ function UTILS.rotateNew(t, r)
         for i = start, size do
             local idx = i + r
             if idx > size then
-                idx =  idx - size 
+                idx = idx - size
             elseif (idx < start) then
-                idx=  idx + size
+                idx = idx + size
             end
             rotated[i] = t[idx]
         end
@@ -122,9 +132,9 @@ function UTILS.rotateNew(t, r)
         for i = 1, size do
             local idx = size - i + r
             if idx > size then
-                idx =  idx - size 
+                idx = idx - size
             elseif (idx < start) then
-                idx=  idx + size
+                idx = idx + size
             end
             rotated[i] = t[idx]
         end
@@ -132,7 +142,7 @@ function UTILS.rotateNew(t, r)
     return rotated
 end
 function UTILS.nthBitIsSet(n, nth)
-    return band(n, lshift(0x1, nth)) ~= 0
+    return band(n, nth == 0 and 0x1 or lshift(0x1, nth)) ~= 0
 end
 function UTILS.nthBitIsSetInt(n, nth)
     return UTILS.nthBitIsSet(n, nth) and 1 or 0
@@ -153,16 +163,39 @@ function UTILS.transpose(t)
     return tt
 end
 function UTILS.range(a, b, step)
-    step = step or 1
     local t = {}
     -- is floor right here?
-    for i = 0, (math.floor((b - a) / step)) do
-        t[i] = a + i * (step or 1)
+    local qty = (b - a)
+    if not step then
+        if qty > 0 then
+            step = 1
+        else
+            step = -1
+            qty = -qty
+        end
+    end
+    for i = 0, (math.floor(math.abs(qty / step))) do
+        t[i] = a + i * step
     end
     return t
 end
 function UTILS.printf(...)
     print(string.format(...))
+end
+function UTILS.concat0(...)
+    local args = {...}
+    if type(args[1]) == "table" then
+        local ct = {}
+        for j = 1, #args do
+            local t = args[j]
+            for i = 0, #t do
+                ct[(not ct[0]) and 0 or (#ct + 1)] = t[i]
+            end
+        end
+        return ct
+    else
+        return table.concat(...)
+    end
 end
 function UTILS.concat(...)
     local args = {...}

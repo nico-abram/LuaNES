@@ -1,13 +1,18 @@
 local complex = require "libs/complex"
 
+local band, bor, bxor, bnot, lshift, rshift = bit.band, bit.bor, bit.bxor, bit.bnot, bit.lshift, bit.rshift
+local map, rotatePositiveIdx, nthBitIsSet, nthBitIsSetInt =
+    UTILS.map,
+    UTILS.rotatePositiveIdx,
+    UTILS.nthBitIsSet,
+    UTILS.nthBitIsSetInt
+
 PALETTE = {}
 local PALETTE = PALETTE
 
-UTILS:import()
-
 function PALETTE:defacto_palette()
     local p =
-        flat_map(
+        UTILS.flat_map(
         {
             {1.00, 1.00, 1.00}, -- default
             {1.00, 0.80, 0.81}, -- emphasize R
@@ -22,7 +27,7 @@ function PALETTE:defacto_palette()
         function(t)
             local rf, gf, bf = t[1], t[2], t[3]
             -- RGB default palette (I don't know where this palette came from)
-            return map(
+            return UTILS.map(
                 {
                     0x666666,
                     0x002a88,
@@ -104,7 +109,7 @@ end
 --[
 -- Nestopia generates a palette systematically (cool!), but it is not compatible with nes-tests-rom
 function PALETTE:nestopia_palette()
-    return map(
+    return UTILS.map(
         range(0, 511),
         function(n)
             local tint, level, color = band(rshift(n, 6), 7), band(rshift(n, 4), 3), band(n, 0x0f)
@@ -136,7 +141,7 @@ function PALETTE:nestopia_palette()
                     iq = iq + complex.convpolar(level1, math.pi / 12 * (({0, 6, 10, 8, 2, 4, 0, 0})[tint + 1]) * 2 - 7)
                 end
             end
-            return map(
+            return UTILS.map(
                 {{105, 0.570}, {251, 0.351}, {15, 1.015}},
                 function(pair)
                     local angle, gain = pair[1], pair[2]
