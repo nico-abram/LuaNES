@@ -1,9 +1,12 @@
-local band = bit.band
-local bor = bit.bor
-local bxor = bit.bxor
-local bnot = bit.bnot
-local lshift = bit.lshift
-local rshift = bit.rshift
+local band, bor, bxor, bnot, lshift, rshift = bit.band, bit.bor, bit.bxor, bit.bnot, bit.lshift, bit.rshift
+local map, rotatePositiveIdx, nthBitIsSet, nthBitIsSetInt, range, concat0 =
+  UTILS.map,
+  UTILS.rotatePositiveIdx,
+  UTILS.nthBitIsSet,
+  UTILS.nthBitIsSetInt,
+  UTILS.range,
+  UTILS.concat0
+
 APU = {}
 local APU = APU
 APU._mt = {__index = APU}
@@ -15,7 +18,6 @@ local NES =
     RP2A03_CC = 12,
     FOREVER_CLOCK = 0xffffffff
   }
-UTILS:import()
 APU.CLK_M2_MUL = 6
 APU.CLK_NTSC = 39375000 * APU.CLK_M2_MUL
 APU.CLK_NTSC_DIV = 11
@@ -130,25 +132,25 @@ function APU:reset_mapping()
   self.triangle:update_settings(rate, fixed)
   self.noise:update_settings(rate, fixed)
 
-  self.cpu:add_mappings(0x4000, bind(self.peek_40xx, self), bind(self.pulse_0.poke_0, self.pulse_0))
-  self.cpu:add_mappings(0x4001, bind(self.peek_40xx, self), bind(self.pulse_0.poke_1, self.pulse_0))
-  self.cpu:add_mappings(0x4002, bind(self.peek_40xx, self), bind(self.pulse_0.poke_2, self.pulse_0))
-  self.cpu:add_mappings(0x4003, bind(self.peek_40xx, self), bind(self.pulse_0.poke_3, self.pulse_0))
-  self.cpu:add_mappings(0x4004, bind(self.peek_40xx, self), bind(self.pulse_1.poke_0, self.pulse_1))
-  self.cpu:add_mappings(0x4005, bind(self.peek_40xx, self), bind(self.pulse_1.poke_1, self.pulse_1))
-  self.cpu:add_mappings(0x4006, bind(self.peek_40xx, self), bind(self.pulse_1.poke_2, self.pulse_1))
-  self.cpu:add_mappings(0x4007, bind(self.peek_40xx, self), bind(self.pulse_1.poke_3, self.pulse_1))
-  self.cpu:add_mappings(0x4008, bind(self.peek_40xx, self), bind(self.triangle.poke_0, self.triangle))
-  self.cpu:add_mappings(0x400a, bind(self.peek_40xx, self), bind(self.triangle.poke_2, self.triangle))
-  self.cpu:add_mappings(0x400b, bind(self.peek_40xx, self), bind(self.triangle.poke_3, self.triangle))
-  self.cpu:add_mappings(0x400c, bind(self.peek_40xx, self), bind(self.noise.poke_0, self.noise))
-  self.cpu:add_mappings(0x400e, bind(self.peek_40xx, self), bind(self.noise.poke_2, self.noise))
-  self.cpu:add_mappings(0x400f, bind(self.peek_40xx, self), bind(self.noise.poke_3, self.noise))
-  self.cpu:add_mappings(0x4010, bind(self.peek_40xx, self), bind(self.dmc.poke_0, self.dmc))
-  self.cpu:add_mappings(0x4011, bind(self.peek_40xx, self), bind(self.dmc.poke_1, self.dmc))
-  self.cpu:add_mappings(0x4012, bind(self.peek_40xx, self), bind(self.dmc.poke_2, self.dmc))
-  self.cpu:add_mappings(0x4013, bind(self.peek_40xx, self), bind(self.dmc.poke_3, self.dmc))
-  self.cpu:add_mappings(0x4015, bind(self.peek_4015, self), bind(self.poke_4015, self))
+  self.cpu:add_mappings(0x4000, UTILS.bind(self.peek_40xx, self), UTILS.bind(self.pulse_0.poke_0, self.pulse_0))
+  self.cpu:add_mappings(0x4001, UTILS.bind(self.peek_40xx, self), UTILS.bind(self.pulse_0.poke_1, self.pulse_0))
+  self.cpu:add_mappings(0x4002, UTILS.bind(self.peek_40xx, self), UTILS.bind(self.pulse_0.poke_2, self.pulse_0))
+  self.cpu:add_mappings(0x4003, UTILS.bind(self.peek_40xx, self), UTILS.bind(self.pulse_0.poke_3, self.pulse_0))
+  self.cpu:add_mappings(0x4004, UTILS.bind(self.peek_40xx, self), UTILS.bind(self.pulse_1.poke_0, self.pulse_1))
+  self.cpu:add_mappings(0x4005, UTILS.bind(self.peek_40xx, self), UTILS.bind(self.pulse_1.poke_1, self.pulse_1))
+  self.cpu:add_mappings(0x4006, UTILS.bind(self.peek_40xx, self), UTILS.bind(self.pulse_1.poke_2, self.pulse_1))
+  self.cpu:add_mappings(0x4007, UTILS.bind(self.peek_40xx, self), UTILS.bind(self.pulse_1.poke_3, self.pulse_1))
+  self.cpu:add_mappings(0x4008, UTILS.bind(self.peek_40xx, self), UTILS.bind(self.triangle.poke_0, self.triangle))
+  self.cpu:add_mappings(0x400a, UTILS.bind(self.peek_40xx, self), UTILS.bind(self.triangle.poke_2, self.triangle))
+  self.cpu:add_mappings(0x400b, UTILS.bind(self.peek_40xx, self), UTILS.bind(self.triangle.poke_3, self.triangle))
+  self.cpu:add_mappings(0x400c, UTILS.bind(self.peek_40xx, self), UTILS.bind(self.noise.poke_0, self.noise))
+  self.cpu:add_mappings(0x400e, UTILS.bind(self.peek_40xx, self), UTILS.bind(self.noise.poke_2, self.noise))
+  self.cpu:add_mappings(0x400f, UTILS.bind(self.peek_40xx, self), UTILS.bind(self.noise.poke_3, self.noise))
+  self.cpu:add_mappings(0x4010, UTILS.bind(self.peek_40xx, self), UTILS.bind(self.dmc.poke_0, self.dmc))
+  self.cpu:add_mappings(0x4011, UTILS.bind(self.peek_40xx, self), UTILS.bind(self.dmc.poke_1, self.dmc))
+  self.cpu:add_mappings(0x4012, UTILS.bind(self.peek_40xx, self), UTILS.bind(self.dmc.poke_2, self.dmc))
+  self.cpu:add_mappings(0x4013, UTILS.bind(self.peek_40xx, self), UTILS.bind(self.dmc.poke_3, self.dmc))
+  self.cpu:add_mappings(0x4015, UTILS.bind(self.peek_4015, self), UTILS.bind(self.poke_4015, self))
   self.frame_irq_clock = (self.frame_counter / self.fixed_clock) - CPU.CLK[1]
 end
 
@@ -195,8 +197,7 @@ function APU:clock_dma(clk)
 end
 
 function APU:update(target)
-  target = target or self.cpu:update()
-  target = target * self.fixed_clock
+  target = (target or self.cpu:update()) * self.fixed_clock
   self:proceed(target)
   if self.frame_counter < target then
     return self:clock_frame_counter()

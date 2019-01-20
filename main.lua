@@ -124,7 +124,7 @@ local function draw()
     --drawPalette()
 end
 function love.draw()
-    --[
+    --[[
     time = time + love.timer.getDelta()
     timeTwo = timeTwo + love.timer.getDelta()
     if time > rate then
@@ -140,7 +140,7 @@ function love.draw()
         fpstmp = 0
     end
     --]]
-    --update()
+    update()
     --[
     local pxs = Nes.cpu.ppu.output_pixels
     for i = 1, pixelCount do

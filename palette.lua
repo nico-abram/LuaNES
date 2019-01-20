@@ -1,15 +1,14 @@
-local band = bit.band
-local bor = bit.bor
-local bxor = bit.bxor
-local bnot = bit.bnot
-local lshift = bit.lshift
-local rshift = bit.rshift
 local complex = require "libs/complex"
+
+local band, bor, bxor, bnot, lshift, rshift = bit.band, bit.bor, bit.bxor, bit.bnot, bit.lshift, bit.rshift
+local map, rotatePositiveIdx, nthBitIsSet, nthBitIsSetInt =
+    UTILS.map,
+    UTILS.rotatePositiveIdx,
+    UTILS.nthBitIsSet,
+    UTILS.nthBitIsSetInt
 
 PALETTE = {}
 local PALETTE = PALETTE
-
-UTILS:import()
 
 function PALETTE:defacto_palette()
     local p =

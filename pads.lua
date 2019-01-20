@@ -1,9 +1,10 @@
-local band = bit.band
-local bor = bit.bor
-local bxor = bit.bxor
-local bnot = bit.bnot
-local lshift = bit.lshift
-local rshift = bit.rshift
+local band, bor, bxor, bnot, lshift, rshift = bit.band, bit.bor, bit.bxor, bit.bnot, bit.lshift, bit.rshift
+local map, rotatePositiveIdx, nthBitIsSet, nthBitIsSetInt =
+  UTILS.map,
+  UTILS.rotatePositiveIdx,
+  UTILS.nthBitIsSet,
+  UTILS.nthBitIsSetInt
+
 Pads = {}
 local Pads = Pads
 Pads._mt = {__index = Pads}
@@ -21,8 +22,8 @@ function Pads:initialize(conf, cpu, apu)
 end
 
 function Pads:reset()
-  self.cpu:add_mappings(0x4016, bind(self.peek_401x, self), bind(self.poke_4016, self))
-  self.cpu:add_mappings(0x4017, bind(self.peek_401x, self), bind(self.apu.poke_4017, self.apu)) -- delegate 4017H to APU
+  self.cpu:add_mappings(0x4016, UTILS.bind(self.peek_401x, self), UTILS.bind(self.poke_4016, self))
+  self.cpu:add_mappings(0x4017, UTILS.bind(self.peek_401x, self), UTILS.bind(self.apu.poke_4017, self.apu)) -- delegate 4017H to APU
   self.pads[1]:reset()
   self.pads[2]:reset()
 end

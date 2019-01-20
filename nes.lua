@@ -1,14 +1,5 @@
-band = bit.band
-bor = bit.bor
-bxor = bit.bxor
-bnot = bit.bnot
-lshift = bit.lshift
-rshift = bit.rshift
 require "libs/serpent"
 require "utils"
-NES = {}
-local NES = NES
-NES._mt = {__index = NES}
 require "cpu"
 require "ppu"
 require "apu"
@@ -16,7 +7,16 @@ require "rom"
 require "palette"
 require "pads"
 
-UTILS:import()
+local band, bor, bxor, bnot, lshift, rshift = bit.band, bit.bor, bit.bxor, bit.bnot, bit.lshift, bit.rshift
+local map, rotatePositiveIdx, nthBitIsSet, nthBitIsSetInt =
+    UTILS.map,
+    UTILS.rotatePositiveIdx,
+    UTILS.nthBitIsSet,
+    UTILS.nthBitIsSetInt
+
+NES = {}
+local NES = NES
+NES._mt = {__index = NES}
 
 function NES:reset()
     self.audio, self.video, self.input = {spec = {}}, {palette = {}}, {}
@@ -54,12 +54,12 @@ function NES:run(counter)
     local acum = 0
     while acum < counter do
         self:run_once()
-        acum = acum+1
+        acum = acum + 1
     end
 end
 function NES:new(opts)
     opts = opts or {}
-    local conf = {romfile = opts.file, pc = opts.pc or nil, loglevel = opts.loglevel or 0, }
+    local conf = {romfile = opts.file, pc = opts.pc or nil, loglevel = opts.loglevel or 0}
     local nes = {}
     local palette = opts.palette or PALETTE:defacto_palette()
     setmetatable(nes, NES._mt)
