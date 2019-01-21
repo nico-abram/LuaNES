@@ -1,3 +1,10 @@
+if pcall(require, "jit.opt") then
+    require("jit.opt").start(
+        "maxmcode=8192",
+        "maxtrace=2000"
+        --
+    )
+end
 require "nes"
 Nes = nil
 local width = 256
@@ -41,6 +48,7 @@ function love.load(arg)
     local bits = 16
     local channels = 1
     sound = love.sound.newSoundData(samplerate / 60 * 2, samplerate, bits, channels)
+    QS = love.audio.newQueueableSource(samplerate, bits, channels)
 end
 local keyEvents = {}
 local keyButtons = {
@@ -72,7 +80,7 @@ end
 love.frame = 0
 local time = 0
 local timeTwo = 0
-local rate = 1 / 51
+local rate = 1 / 62.5
 local fps = 0
 local fpstmp = 0
 local pixelCount = PPU.SCREEN_HEIGHT * PPU.SCREEN_WIDTH
@@ -87,20 +95,17 @@ local function update()
     local samples = Nes.cpu.apu.output
     --[[
     for i = 1, #samples do
-        sound:setSample(i, (samples[i] % 256))
+        sound:setSample(i, samples[i])
     end
-    if lastSource then
-        lastSource:stop()
-    end
-    lastSource = love.audio.newSource(sound)
-    lastSource:play()
-    ]]
+    QS:queue(sound)
+    QS:play()
+    --]]
 end
 local function drawScreen()
     local sx = love.graphics.getWidth() / image:getWidth()
     local sy = love.graphics.getHeight() / image:getHeight()
     love.graphics.draw(image, 0, 0, 0, sx, sy)
-    love.graphics.print("Love FPS: " .. tostring(love.timer.getFPS()) .. " Nes FPS: " .. tostring(fps), 10, 10)
+    love.graphics.print(" Nes FPS: " .. tostring(fps), 10, 10)
 end
 local function drawPalette()
     local palette = Nes.cpu.ppu.output_color
@@ -124,7 +129,7 @@ local function draw()
     --drawPalette()
 end
 function love.draw()
-    --[[
+    --[
     time = time + love.timer.getDelta()
     timeTwo = timeTwo + love.timer.getDelta()
     if time > rate then
@@ -140,7 +145,7 @@ function love.draw()
         fpstmp = 0
     end
     --]]
-    update()
+    --update()
     --[
     local pxs = Nes.cpu.ppu.output_pixels
     for i = 1, pixelCount do

@@ -1,11 +1,12 @@
 local band, bor, bxor, bnot, lshift, rshift = bit.band, bit.bor, bit.bxor, bit.bnot, bit.lshift, bit.rshift
-local map, rotatePositiveIdx, nthBitIsSet, nthBitIsSetInt, range, concat0 =
+local map, rotatePositiveIdx, nthBitIsSet, nthBitIsSetInt, range, concat0, concat =
   UTILS.map,
   UTILS.rotatePositiveIdx,
   UTILS.nthBitIsSet,
   UTILS.nthBitIsSetInt,
   UTILS.range,
-  UTILS.concat0
+  UTILS.concat0,
+  UTILS.concat
 
 APU = {}
 local APU = APU
@@ -269,11 +270,11 @@ function APU:clock_frame_irq(target)
 end
 
 function APU:flush_sound()
-  -- Since sound isn't used yet there's no need to waste cpu cycles
-  -- TODO
   do
     return
   end
+  -- Since sound isn't used yet there's no need to waste cpu cycles
+  -- TODO
   if #self.buffer < self.settings_rate / 60 then
     local target = self.cpu:current_clock() * self.fixed_clock
     self:proceed(target)
@@ -288,7 +289,6 @@ function APU:flush_sound()
   end
   self.output = {} --.clear
   self.output = concat(self.output, self.buffer)
-  -- Array#replace creates an object internally (?????)
   self.buffer = {} --.clear
 end
 
@@ -325,7 +325,7 @@ function APU:peek_4015(_addr)
     self:update(elapsed)
   end
   return bor(
-    self.cpu.clear_irq(CPU.IRQ_FRAME),
+    self.cpu:clear_irq(CPU.IRQ_FRAME),
     (self.pulse_0.status and 0x01 or 0),
     (self.pulse_1.status and 0x02 or 0),
     (self.triangle.status and 0x04 or 0),
@@ -629,7 +629,7 @@ function Pulse:reset()
   self.freq = self.fixed * 2
   self.valid_freq = false
   self.step = 0
-  self.form = Pulse.WAVE_FORM[0]
+  self.form = Pulse.WAVE_FORM[1]
   self.sweep_rate = 0
   self.sweep_count = 1
   self.sweep_reload = false
@@ -656,7 +656,7 @@ end
 
 function Pulse:poke_0(_addr, data)
   self._parent:poke_0(self)
-  self.form = Pulse.WAVE_FORM[band(rshift(data, 6), 3)]
+  self.form = Pulse.WAVE_FORM[1 + band(rshift(data, 6), 3)]
 end
 
 function Pulse:poke_1(_addr, data)
@@ -881,11 +881,7 @@ function Noise:sample()
     repeat
       self.bits = self.shifter[self.bits]
       if self.bits % 2 == 0 then
-        v = -self.timer
-        if v > self.freq then
-          v = self.freq
-        end
-        sum = sum + v
+        sum = sum + math.min(-self.timer, self.freq)
       end
       self.timer = self.timer + self.freq
     until not (self.timer < 0)

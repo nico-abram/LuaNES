@@ -1,12 +1,13 @@
 local serpent = require("libs/serpent")
 
 local band, bor, bxor, bnot, lshift, rshift = bit.band, bit.bor, bit.bxor, bit.bnot, bit.lshift, bit.rshift
-local map, rotatePositiveIdx, nthBitIsSet, nthBitIsSetInt, range, concat0 =
+local map, rotatePositiveIdx, nthBitIsSet, nthBitIsSetInt, range, bind =
     UTILS.map,
     UTILS.rotatePositiveIdx,
     UTILS.nthBitIsSet,
     UTILS.nthBitIsSetInt,
-    UTILS.range
+    UTILS.range,
+    UTILS.bind
 
 ROM = {}
 local ROM = ROM
@@ -209,7 +210,7 @@ function UxROM:new(...)
     return rom
 end
 function UxROM:reset()
-    self.cpu.add_mappings(range(0x8000, 0xffff), UTILS.tGetter(self.prg_ref), bind(self.poke_8000, self))
+    self.cpu:add_mappings(range(0x8000, 0xffff), UTILS.tGetter(self.prg_ref), bind(self.poke_8000, self))
 end
 
 function UxROM:poke_8000(_addr, data)
@@ -229,7 +230,7 @@ function CNROM:new(...)
     return rom
 end
 function CNROM:reset()
-    self.cpu.add_mappings(
+    self.cpu:add_mappings(
         range(0x8000, 0xffff),
         UTILS.tGetter(self.prg_ref),
         self.chr_ram and bind(self.poke_8000, self) or CPU.UNDEFINED
@@ -246,8 +247,9 @@ local MMC1 = {}
 MMC1._mt = {__index = MMC1}
 setmetatable(MMC1, {__index = ROM})
 function MMC1:new(...)
-    local rom = ROM:new(unpack(...))
+    local rom = {}
     setmetatable(rom, MMC1._mt)
+    rom:initialize(...)
     return rom
 end
 
@@ -268,12 +270,26 @@ function MMC1:reset()
     self.shift = 0
     self.shift_count = 0
 
-    self.chr_banks = self.chr_banks.flatten.each_slice(0x1000).to_a
+    --self.chr_banks = self.chr_banks.flatten.each_slice(0x1000).to_a
+    local chr = {}
+    local j, k = 1, 1
+    for i = 1, #self.chr_banks do
+        local bank = self.chr_banks[i]
+        for i = 1, #bank do
+            chr[j][k] = bank[i]
+            k = k + 1
+            if k == 0x1000 + 1 then
+                j = j + 1
+                k = 1
+            end
+        end
+    end
+    self.chr_banks = chr
 
     self.wrk_readable = true
     self.wrk_writable = true
-    self.cpu.add_mappings(range(0x6000, 0x7fff), bind(self.peek_6000, self), bind(self.poke_6000, self))
-    self.cpu.add_mappings(range(0x8000, 0xffff), UTILS.tGetter(self.prg_ref), bind(self.poke_prg, self))
+    self.cpu:add_mappings(range(0x6000, 0x7fff), bind(self.peek_6000, self), bind(self.poke_6000, self))
+    self.cpu:add_mappings(range(0x8000, 0xffff), UTILS.tGetter(self.prg_ref), bind(self.poke_prg, self))
 
     self:update_nmt("horizontal")
     self:update_prg("fix_last", 0, 0)
@@ -281,7 +297,7 @@ function MMC1:reset()
 end
 
 function MMC1:poke_prg(addr, val)
-    if val[7] == 1 then
+    if nthBitIsSetInt(val, 7) == 1 then
         self.shift = 0
         self.shift_count = 0
     else
@@ -328,8 +344,8 @@ function MMC1:update_prg(prg_mode, prg_bank, chr_bank_0)
     end
     self.prg_mode, self.prg_bank, self.chr_bank_0 = prg_mode, prg_bank, chr_bank_0
 
-    local high_bit = band(chr_bank_0, band(0x10, (self.prg_banks.size - 1)))
-    local prg_bank_ex = band(bor(band(self.prg_bank, 0x0f), high_bit), (self.prg_banks.size - 1))
+    local high_bit = band(chr_bank_0, band(0x10, (#self.prg_banks - 1)))
+    local prg_bank_ex = band(bor(band(self.prg_bank, 0x0f), high_bit), (#self.prg_banks - 1))
     local lower
     local upper
     if self.prg_mode == "conseq" then
@@ -341,13 +357,13 @@ function MMC1:update_prg(prg_mode, prg_bank, chr_bank_0)
         upper = prg_bank_ex
     else
         lower = prg_bank_ex
-        upper = bor(band(self.prg_banks.size - 1, 0x0f), high_bit)
+        upper = bor(band(#self.prg_banks - 1, 0x0f), high_bit)
     end
     for i = 0x8000 + 1, 0x8000 + 0x4000 + 1 do
-        self.prg_ref[i] = self.prg_banks[lower][i - 0x8000]
+        self.prg_ref[i] = self.prg_banks[1 + lower][i - 0x8000]
     end
     for i = 0xc000 + 1, 0xc000 + 0x4000 + 1 do
-        self.prg_ref[i] = self.prg_banks[upper][i - 0xc000]
+        self.prg_ref[i] = self.prg_banks[1 + upper][i - 0xc000]
     end
 end
 
@@ -404,16 +420,16 @@ function MMC3:reset()
     self.wrk_writable = false
 
     local poke_a000 = self.mirroring ~= "FourScreen" and bind(self.poke_a000, self) or CPU.UNDEFINED
-    self.cpu.add_mappings(range(0x6000, 0x7fff), bind(self.peek_6000, self), bind(self.poke_6000, self))
+    self.cpu:add_mappings(range(0x6000, 0x7fff), bind(self.peek_6000, self), bind(self.poke_6000, self))
     local g = UTILS.tGetter(self.prg_ref)
-    self.cpu.add_mappings(range(0x8000, 0x9fff, 2), g, bind(self.poke_8000, self))
-    self.cpu.add_mappings(range(0x8001, 0x9fff, 2), g, bind(self.poke_8001, self))
-    self.cpu.add_mappings(range(0xa000, 0xbfff, 2), g, poke_a000)
-    self.cpu.add_mappings(range(0xa001, 0xbfff, 2), g, bind(self.poke_a001, self))
-    self.cpu.add_mappings(range(0xc000, 0xdfff, 2), g, bind(self.poke_c000, self))
-    self.cpu.add_mappings(range(0xc001, 0xdfff, 2), g, bind(self.poke_c001, self))
-    self.cpu.add_mappings(range(0xe000, 0xffff, 2), g, bind(self.poke_e000, self))
-    self.cpu.add_mappings(range(0xe001, 0xffff, 2), g, bind(self.poke_e001, self))
+    self.cpu:add_mappings(range(0x8000, 0x9fff, 2), g, bind(self.poke_8000, self))
+    self.cpu:add_mappings(range(0x8001, 0x9fff, 2), g, bind(self.poke_8001, self))
+    self.cpu:add_mappings(range(0xa000, 0xbfff, 2), g, poke_a000)
+    self.cpu:add_mappings(range(0xa001, 0xbfff, 2), g, bind(self.poke_a001, self))
+    self.cpu:add_mappings(range(0xc000, 0xdfff, 2), g, bind(self.poke_c000, self))
+    self.cpu:add_mappings(range(0xc001, 0xdfff, 2), g, bind(self.poke_c001, self))
+    self.cpu:add_mappings(range(0xe000, 0xffff, 2), g, bind(self.poke_e000, self))
+    self.cpu:add_mappings(range(0xe001, 0xffff, 2), g, bind(self.poke_e001, self))
 
     self:update_prg(0x8000, 0)
     self:update_prg(0xa000, 1)
@@ -442,7 +458,7 @@ end
 -- 0xc000..0xdfff: 2 0
 -- 0xe000..0xffff: 3 3
 function MMC3:update_prg(addr, bank)
-    bank = bank % self.prg_banks.size
+    bank = bank % (#self.prg_banks)
     if self.prg_bank_swap and addr[13] == 0 then
         addr = bxor(addr, 0x4000)
     end
@@ -456,7 +472,7 @@ function MMC3:update_chr(addr, bank)
         return
     end
     local idx = addr / 0x400
-    bank = bank % self.chr_banks.size
+    bank = bank % (#self.chr_banks)
     if self.chr_bank_mapping[idx] == bank then
         return
     end
@@ -531,7 +547,7 @@ end
 function MMC3:poke_e000(_addr, _data)
     self.ppu:update(0)
     self.enabled = false
-    self.cpu.clear_irq(CPU.IRQ_EXT)
+    self.cpu:clear_irq(CPU.IRQ_EXT)
 end
 
 function MMC3:poke_e001(_addr, _data)
