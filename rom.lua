@@ -281,13 +281,16 @@ function MMC1:reset()
     for i = 1, #old do
         local bank = old[i]
         for h = 1, #bank do
-            chr[j][k] = bank[h]
-            k = k + 1
-            if k == 0x1000 + 1 + 1 then
-                j = j + 1
-                k = 1
-                if not chr[j] then
-                    chr[j] = {}
+            local x = bank[h]
+            if x then
+                chr[j][k] = x
+                k = k + 1
+                if k == 0x1000 + 1 then
+                    j = j + 1
+                    k = 1
+                    if not chr[j] then
+                        chr[j] = {}
+                    end
                 end
             end
         end
@@ -391,10 +394,10 @@ function MMC1:update_chr(chr_mode, chr_bank_0, chr_bank_1)
         lower = self.chr_bank_0 + 1
         upper = self.chr_bank_1 + 1
     end
-    for i = 1, 0x1000 + 1 do
+    for i = 1, 0x1000 do
         self.chr_ref[i] = self.chr_banks[lower][i]
     end
-    for i = 1, 0x1000 + 1 do
+    for i = 1, 0x1000 do
         self.chr_ref[i + 0x1000] = self.chr_banks[upper][i]
     end
 end
@@ -486,8 +489,8 @@ function MMC3:update_chr(addr, bank)
         addr = bxor(addr, 0x1000)
     end
     self.ppu:update(0)
-    for i = addr + 1, addr + 0x400 + 1 do
-        self.chr_ref[i] = self.chr_banks[bank][i - addr]
+    for i = 1, 0x400 + 1 do
+        self.chr_ref[i + addr] = self.chr_banks[bank][i]
     end
     self.chr_bank_mapping[idx] = bank
 end
