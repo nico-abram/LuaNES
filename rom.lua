@@ -87,7 +87,7 @@ function ROM:initialize(conf, cpu, ppu, basename, bytes, str)
 
     self:init()
 
-    self.ppu.nametables = self.mirroring
+    self.ppu:nametables(self.mirroring)
     self.ppu:set_chr_mem(self.chr_ref, self.chr_ram)
 end
 
@@ -261,9 +261,9 @@ function MMC1:init()
     self.chr_mode = nil
     self.nmt_mode = nil
     self.prg_mode = nil
-    self.chr_bank_1 = 0
     self.prg_bank = 0
     self.chr_bank_0 = 0
+    self.chr_bank_1 = 0
 end
 
 function MMC1:reset()
@@ -271,20 +271,27 @@ function MMC1:reset()
     self.shift_count = 0
 
     --self.chr_banks = self.chr_banks.flatten.each_slice(0x1000).to_a
-    local chr = {}
+    local chr = self.chr_banks
+    local old = UTILS.copy(self.chr_banks)
+    for i = 2, #chr do
+        chr[i] = nil
+    end
+    chr[1] = {}
     local j, k = 1, 1
-    for i = 1, #self.chr_banks do
-        local bank = self.chr_banks[i]
-        for i = 1, #bank do
-            chr[j][k] = bank[i]
+    for i = 1, #old do
+        local bank = old[i]
+        for h = 1, #bank do
+            chr[j][k] = bank[h]
             k = k + 1
-            if k == 0x1000 + 1 then
+            if k == 0x1000 + 1 + 1 then
                 j = j + 1
                 k = 1
+                if not chr[j] then
+                    chr[j] = {}
+                end
             end
         end
     end
-    self.chr_banks = chr
 
     self.wrk_readable = true
     self.wrk_writable = true
@@ -300,33 +307,33 @@ function MMC1:poke_prg(addr, val)
     if nthBitIsSetInt(val, 7) == 1 then
         self.shift = 0
         self.shift_count = 0
-    else
-        self.shift = self.shift and self.shift or lshift(val[0], self.shift_count)
-        self.shift_count = self.shift_count + 1
-        if self.shift_count == 0x05 then
-            local x = band(rshift(addr, 13), 0x3)
-            if x == 0 then -- control
-                local nmt_mode = NMT_MODE[band(self.shift, 3)]
-                local prg_mode = PRG_MODE[band(rshift(self.shift, 2), 3)]
-                local chr_mode = CHR_MODE[band(rshift(self.shift, 4), 1)]
-                self:update_nmt(nmt_mode)
-                self:update_prg(prg_mode, self.prg_bank, self.chr_bank_0)
-                self:update_chr(chr_mode, self.chr_bank_0, self.chr_bank_1)
-            elseif x == 1 then -- change chr_bank_0
-                -- update_prg might modify self.chr_bank_0 and prevent updating chr bank,
-                -- so keep current value.
-                local bak_chr_bank_0 = self.chr_bank_0
-                self:update_prg(self.prg_mode, self.prg_bank, self.shift)
-                self.chr_bank_0 = bak_chr_bank_0
-                self:update_chr(self.chr_mode, self.shift, self.chr_bank_1)
-            elseif x == 2 then -- change chr_bank_1
-                self:update_chr(self.chr_mode, self.chr_bank_0, self.shift)
-            elseif x == 3 then -- change png_bank
-                self:update_prg(self.prg_mode, self.shift, self.chr_bank_0)
-            end
-            self.shift = 0
-            self.shift_count = 0
+        return
+    end
+    self.shift = bor(self.shift, lshift(nthBitIsSetInt(val, 0), self.shift_count))
+    self.shift_count = self.shift_count + 1
+    if self.shift_count == 0x05 then
+        local x = band(rshift(addr, 13), 0x3)
+        if x == 0 then -- control
+            local nmt_mode = NMT_MODE[1 + band(self.shift, 3)]
+            local prg_mode = PRG_MODE[1 + band(rshift(self.shift, 2), 3)]
+            local chr_mode = CHR_MODE[1 + band(rshift(self.shift, 4), 1)]
+            self:update_nmt(nmt_mode)
+            self:update_prg(prg_mode, self.prg_bank, self.chr_bank_0)
+            self:update_chr(chr_mode, self.chr_bank_0, self.chr_bank_1)
+        elseif x == 1 then -- change chr_bank_0
+            -- update_prg might modify self.chr_bank_0 and prevent updating chr bank,
+            -- so keep current value.
+            local bak_chr_bank_0 = self.chr_bank_0
+            self:update_prg(self.prg_mode, self.prg_bank, self.shift)
+            self.chr_bank_0 = bak_chr_bank_0
+            self:update_chr(self.chr_mode, self.shift, self.chr_bank_1)
+        elseif x == 2 then -- change chr_bank_1
+            self:update_chr(self.chr_mode, self.chr_bank_0, self.shift)
+        elseif x == 3 then -- change png_bank
+            self:update_prg(self.prg_mode, self.shift, self.chr_bank_0)
         end
+        self.shift = 0
+        self.shift_count = 0
     end
 end
 
@@ -335,7 +342,7 @@ function MMC1:update_nmt(nmt_mode)
         return
     end
     self.nmt_mode = nmt_mode
-    self.ppu.nametables = self.nmt_mode
+    self.ppu:nametables(self.nmt_mode)
 end
 
 function MMC1:update_prg(prg_mode, prg_bank, chr_bank_0)
@@ -344,26 +351,25 @@ function MMC1:update_prg(prg_mode, prg_bank, chr_bank_0)
     end
     self.prg_mode, self.prg_bank, self.chr_bank_0 = prg_mode, prg_bank, chr_bank_0
 
-    local high_bit = band(chr_bank_0, band(0x10, (#self.prg_banks - 1)))
-    local prg_bank_ex = band(bor(band(self.prg_bank, 0x0f), high_bit), (#self.prg_banks - 1))
+    local high_bit = band(chr_bank_0, 0x10, #self.prg_banks - 1)
+    local prg_bank_ex = band(bor(band(self.prg_bank, 0x0f), high_bit), #self.prg_banks - 1)
     local lower
     local upper
     if self.prg_mode == "conseq" then
         lower = band(prg_bank_ex, bnot(1))
         upper = lower + 1
     elseif self.prg_mode == "fix_first" then
-        --elseif self.prg_mode == "fix_last" then
         lower = 0
         upper = prg_bank_ex
-    else
+    elseif self.prg_mode == "fix_last" then
         lower = prg_bank_ex
         upper = bor(band(#self.prg_banks - 1, 0x0f), high_bit)
     end
-    for i = 0x8000 + 1, 0x8000 + 0x4000 + 1 do
-        self.prg_ref[i] = self.prg_banks[1 + lower][i - 0x8000]
+    for i = 1, 0x4000 + 1 do
+        self.prg_ref[i + 0x8000] = self.prg_banks[1 + lower][i]
     end
-    for i = 0xc000 + 1, 0xc000 + 0x4000 + 1 do
-        self.prg_ref[i] = self.prg_banks[1 + upper][i - 0xc000]
+    for i = 1, 0x4000 + 1 do
+        self.prg_ref[i + 0xc000] = self.prg_banks[1 + upper][i]
     end
 end
 
@@ -379,17 +385,17 @@ function MMC1:update_chr(chr_mode, chr_bank_0, chr_bank_1)
     local upper
     self.ppu:update(0)
     if self.chr_mode == "conseq" then
-        lower = band(self.chr_bank_0, 0x1e)
+        lower = band(self.chr_bank_0, 0x1e) + 1
         upper = lower + 1
     else
-        lower = self.chr_bank_0
-        upper = self.chr_bank_1
+        lower = self.chr_bank_0 + 1
+        upper = self.chr_bank_1 + 1
     end
-    for i = 0x0000 + 1, 0x1000 + 1 do
-        self.chr_ref[i] = self.prg_banks[lower][i]
+    for i = 1, 0x1000 + 1 do
+        self.chr_ref[i] = self.chr_banks[lower][i]
     end
-    for i = 0x1000 + 1, 0x1000 + 0x1000 + 1 do
-        self.chr_ref[i] = self.prg_banks[upper][i - 0x1000]
+    for i = 1, 0x1000 + 1 do
+        self.chr_ref[i + 0x1000] = self.chr_banks[upper][i]
     end
 end
 ROM.MAPPER_DB[0x01] = MMC1
@@ -526,7 +532,7 @@ function MMC3:poke_8001(_addr, data)
 end
 
 function MMC3:poke_a000(_addr, data)
-    self.ppu.nametables = data[0] == 1 and "horizontal" or "vertical"
+    self.ppu:nametables(data[0] == 1 and "horizontal" or "vertical")
 end
 
 function MMC3:poke_a001(_addr, data)

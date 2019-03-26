@@ -388,19 +388,19 @@ function PPU:nametables(mode)
     self:update(RP2C02_CC)
     local idxs = PPU.NMT_TABLE[mode]
     if
-        all(
+        UTILS.all(
             range(0, 3),
             function(i)
-                return self.nmt_ref[i] == self.nmt_mem[idxs[i]]
+                return self.nmt_ref[i] == self.nmt_mem[idxs[i + 1]]
             end
         )
      then
         return
     end
-    self.nmt_ref[0] = self.nmt_mem[idxs[0]]
-    self.nmt_ref[1] = self.nmt_mem[idxs[1]]
-    self.nmt_ref[2] = self.nmt_mem[idxs[2]]
-    self.nmt_ref[3] = self.nmt_mem[idxs[3]]
+    self.nmt_ref[0] = self.nmt_mem[idxs[1]]
+    self.nmt_ref[1] = self.nmt_mem[idxs[2]]
+    self.nmt_ref[2] = self.nmt_mem[idxs[3]]
+    self.nmt_ref[3] = self.nmt_mem[idxs[4]]
     self:setup_lut()
 end
 
