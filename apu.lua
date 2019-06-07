@@ -69,10 +69,10 @@ function APU:initialize(conf, cpu, rate, bits)
   self.mixer = MIXER:new(self.pulse_0, self.pulse_1, self.triangle, self.noise, self.dmc)
 
   if rate < 11050 then
-    self.conf.fatal("audio sample rate must be >= 11050")
+    error("audio sample rate must be >= 11050")
   end
   if bits ~= 8 and bits ~= 16 then
-    self.conf.fatal("audio bit depth must be 8 or 16")
+    error("audio bit depth must be 8 or 16")
   end
 
   self.settings_rate = rate
@@ -488,6 +488,21 @@ function MIXER:reset()
 end
 
 function MIXER:sample()
+  do
+    --[[
+    local dac0 = self.pulse_0:sample() + self.pulse_1:sample()
+    local dac0 = 0.00752 * dac0
+    local dac1 = 0 --0.00851 * self.triangle:sample() + 0.00494 * self.noise:sample() + 0.00335 * self.dmc:sample()
+    --]]
+    --[
+    local dac0 = self.pulse_0:sample() + self.pulse_1:sample()
+    local dac0 = 95.88 / ((8128 / dac0) + 100)
+    local dac1 =
+      159.79 /
+      (100 + 1 / ((self.triangle:sample() / 8227) + (self.noise:sample() / 12241) + (self.dmc:sample() / 22638)))
+    --]]
+    return (dac0 + dac1) * 2 ^ 3
+  end
   local dac0 = self.pulse_0:sample() + self.pulse_1:sample()
   local dac1 = self.triangle:sample() + self.noise:sample() + self.dmc:sample()
   local sample =
@@ -613,6 +628,7 @@ function Pulse:initialize(_apu)
   self.wave_length = 0
   self.envelope = Envelope:new()
   self.length_counter = LengthCounter:new()
+  self.duty = 0
 end
 
 function Pulse:reset()
@@ -647,7 +663,8 @@ end
 
 function Pulse:poke_0(_addr, data)
   self._parent.poke_0(self, _addr, data)
-  self.form = Pulse.WAVE_FORM[1 + band(rshift(data, 6), 3)]
+  self.duty = band(rshift(data, 6), 3)
+  self.form = Pulse.WAVE_FORM[1 + self.duty]
 end
 
 function Pulse:poke_1(_addr, data)
@@ -699,7 +716,6 @@ function Pulse:sample()
   local sum = self.timer
   self.timer = self.timer - self.rate
   if self.is_active then
-    --[[
     if self.timer < 0 then
       sum = rshift(sum, self.form[self.step])
       repeat
@@ -710,24 +726,13 @@ function Pulse:sample()
         self.step = band((self.step + 1), 7)
         sum = sum + rshift(v, self.form[self.step])
         self.timer = self.timer + self.freq
-      until not (self.timer < 0)
+      until self.timer > 0
       self.amp = (sum * self.envelope.output + self.rate / 2) / self.rate
     else
       self.amp = rshift(self.envelope.output, self.form[self.step])
     end
-    ]]
-    self.step = band((self.step + count), 7)
-    self.amp = self.envelope.output * self.form[self.step]
   else
-    if self.timer < 0 then
-      count = (-self.timer + self.freq - 1) / self.freq
-      self.step = band((self.step + count), 7)
-      self.timer = self.timer + count * self.freq
-    end
-    if self.amp < APU.CHANNEL_OUTPUT_DECAY then
-      return 0
-    end
-    self.amp = self.amp - APU.CHANNEL_OUTPUT_DECAY
+    self.amp = 0
   end
   return self.amp
 end

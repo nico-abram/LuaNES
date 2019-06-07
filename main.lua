@@ -12,6 +12,7 @@ local height = 240
 local pixSize = 1
 local lastSource
 local sound = false
+local DEBUG = false
 function love.load(arg)
     --[[
     love.profiler = require("libs/profile")
@@ -21,7 +22,8 @@ function love.load(arg)
     local file = arg[1] or " "
     local loglvl = loadstring("return " .. (arg[2] or "0"))
     loglvl = loglvl and loglvl()
-    local pc = loadstring("return " .. (arg[3] or ""))
+    DEBUG = not (not (loadstring("return " .. (arg[3] or "false"))))
+    local pc = loadstring("return " .. (arg[4] or ""))
     pc = pc and pc()
     imageData = love.image.newImageData(width * pixSize + 1, height * pixSize + 1)
     image = love.graphics.newImage(imageData)
@@ -47,7 +49,7 @@ function love.load(arg)
     local samplerate = 44100
     local bits = 16
     local channels = 1
-    sound = love.sound.newSoundData(samplerate / 60 * 2, samplerate, bits, channels)
+    sound = love.sound.newSoundData(samplerate / 60 + 1, samplerate, bits, channels)
     QS = love.audio.newQueueableSource(samplerate, bits, channels)
 end
 local keyEvents = {}
@@ -93,13 +95,11 @@ local function update()
     keyEvents = {}
     Nes:run_once()
     local samples = Nes.cpu.apu.output
-    --[[
     for i = 1, #samples do
         sound:setSample(i, samples[i])
     end
     QS:queue(sound)
     QS:play()
-    --]]
 end
 local function drawScreen()
     local sx = love.graphics.getWidth() / image:getWidth()
@@ -110,23 +110,57 @@ end
 local function drawPalette()
     local palette = Nes.cpu.ppu.output_color
     local w, h = 10, 10
-    local x, y = 700, 500
+    local x, y = 0, 50
     local row, column = 4, 8
     for i = 1, #palette do
         local px = palette[i]
         if px then
-            local r = px[1] / 256
-            local g = px[2] / 256
-            local b = px[3] / 256
+            local r = px[1]
+            local g = px[2]
+            local b = px[3]
             love.graphics.setColor(r, g, b, 1)
             love.graphics.rectangle("fill", x + ((i - 1) % row) * w, y + math.floor((i - 1) / 4) * h, w, h)
         end
     end
     love.graphics.setColor(1, 1, 1, 1)
 end
+local function drawAPUState()
+    local apu = Nes.cpu.apu
+    love.graphics.print(" Pulse 1", 10, 140)
+    local pulse_0 = apu.pulse_0
+    love.graphics.print(
+        string.format(
+            "F:%d D:%d V:%d  S:%d C:%d",
+            pulse_0.freq,
+            pulse_0.duty,
+            pulse_0.envelope.output / APU.CHANNEL_OUTPUT_MUL,
+            pulse_0.step,
+            pulse_0.length_counter.count
+        ),
+        10,
+        160
+    )
+    love.graphics.print(" Pulse 2", 10, 180)
+    local pulse_1 = apu.pulse_1
+    love.graphics.print(
+        string.format(
+            "F:%d D:%d V:%d  S:%d C:%d",
+            pulse_1.freq,
+            pulse_1.duty,
+            pulse_1.envelope.output / APU.CHANNEL_OUTPUT_MUL,
+            pulse_1.step,
+            pulse_1.length_counter.count
+        ),
+        10,
+        200
+    )
+end
 local function draw()
     drawScreen()
-    --drawPalette()
+    if DEBUG then
+        drawPalette()
+        drawAPUState()
+    end
 end
 function love.draw()
     --[
@@ -145,7 +179,15 @@ function love.draw()
         fpstmp = 0
     end
     --]]
-    --update()
+    --[[
+    timeTwo = timeTwo + love.timer.getDelta()
+    if timeTwo > 1 then
+        timeTwo = 0
+        fps = fpstmp
+        fpstmp = 0
+    end
+    update()
+    --]]
     --[
     local pxs = Nes.cpu.ppu.output_pixels
     for i = 1, pixelCount do
