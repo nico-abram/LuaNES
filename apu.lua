@@ -1,3 +1,5 @@
+-- Refer to https://wiki.nesdev.com/w/index.php/APU
+-- for documentation on how the APU works
 local band, bor, bxor, bnot, lshift, rshift = bit.band, bit.bor, bit.bxor, bit.bnot, bit.lshift, bit.rshift
 local map, rotatePositiveIdx, nthBitIsSet, nthBitIsSetInt, range, concat0, concat =
   UTILS.map,
@@ -454,8 +456,8 @@ end
 
 function Envelope:write(data)
   self.volume_base = band(data, 0x0f)
-  self.constant = nthBitIsSetInt(data, 4) == 1
-  self.looping = nthBitIsSetInt(data, 5) == 1
+  self.constant = nthBitIsSet(data, 4)
+  self.looping = nthBitIsSet(data, 5)
   return self:update_output()
 end
 
@@ -599,18 +601,12 @@ local Pulse = Pulse
 Pulse.MIN_FREQ = 0x0008
 Pulse.MAX_FREQ = 0x07ff
 --Pulse.WAVE_FORM = map{0b11111101, 0b11111001, 0b11100001, 0b00000110},function(n) return UTILS.map(range(0,7), function(i) return n[i] * 0x1f } end))
-Pulse.WAVE_FORM =
-  UTILS.map(
-  {0xFD, 0xF9, 0xE1, 0x06},
-  function(n)
-    return UTILS.map(
-      range(0, 7),
-      function(i)
-        return nthBitIsSetInt(n, i) * 0x1f
-      end
-    )
-  end
-)
+Pulse.WAVE_FORM = {
+  {[0] = 0, 0, 0, 0, 0, 0, 0, 1},
+  {[0] = 0, 0, 0, 0, 0, 0, 1, 1},
+  {[0] = 0, 0, 0, 0, 1, 1, 1, 1},
+  {[0] = 1, 1, 1, 1, 1, 1, 0, 0}
+}
 
 function Pulse:initialize(_apu)
   self._parent.initialize(self, _apu)
@@ -703,6 +699,7 @@ function Pulse:sample()
   local sum = self.timer
   self.timer = self.timer - self.rate
   if self.is_active then
+    --[[
     if self.timer < 0 then
       sum = rshift(sum, self.form[self.step])
       repeat
@@ -718,6 +715,9 @@ function Pulse:sample()
     else
       self.amp = rshift(self.envelope.output, self.form[self.step])
     end
+    ]]
+    self.step = band((self.step + count), 7)
+    self.amp = self.envelope.output * self.form[self.step]
   else
     if self.timer < 0 then
       count = (-self.timer + self.freq - 1) / self.freq
