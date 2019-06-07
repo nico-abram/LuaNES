@@ -270,11 +270,6 @@ function APU:clock_frame_irq(target)
 end
 
 function APU:flush_sound()
-  do
-    return
-  end
-  -- Since sound isn't used yet there's no need to waste cpu cycles
-  -- TODO
   if #self.buffer < self.settings_rate / 60 then
     local target = self.cpu:current_clock() * self.fixed_clock
     self:proceed(target)
@@ -287,8 +282,7 @@ function APU:flush_sound()
       end
     end
   end
-  self.output = {} --.clear
-  self.output = concat(self.output, self.buffer)
+  self.output = concat({}, self.buffer)
   self.buffer = {} --.clear
 end
 
@@ -307,11 +301,11 @@ end
 -- Control
 function APU:poke_4015(_addr, data)
   self:update()
-  self.pulse_0:enable(nthBitIsSetInt(data, 0) == 1)
-  self.pulse_1:enable(nthBitIsSetInt(data, 1) == 1)
-  self.triangle:enable(nthBitIsSetInt(data, 2) == 1)
-  self.noise:enable(nthBitIsSetInt(data, 3) == 1)
-  self.dmc:enable(nthBitIsSetInt(data, 4) == 1)
+  self.pulse_0:enable(nthBitIsSet(data, 0))
+  self.pulse_1:enable(nthBitIsSet(data, 1))
+  self.triangle:enable(nthBitIsSet(data, 2))
+  self.noise:enable(nthBitIsSet(data, 3))
+  self.dmc:enable(nthBitIsSet(data, 4))
 end
 
 -- Status
@@ -423,6 +417,7 @@ function LengthCounter:clock()
   self.count = self.count - 1
   return self.count == 0
 end
+
 local Envelope = UTILS.class()
 
 function Envelope:reset_clock()
@@ -655,7 +650,7 @@ function Pulse:update_freq()
 end
 
 function Pulse:poke_0(_addr, data)
-  self._parent:poke_0(self)
+  self._parent.poke_0(self, _addr, data)
   self.form = Pulse.WAVE_FORM[1 + band(rshift(data, 6), 3)]
 end
 
