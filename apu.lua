@@ -489,6 +489,7 @@ end
 
 function MIXER:sample()
   do
+    -- Formulas taken from https://wiki.nesdev.com/w/index.php/APU_Mixer
     --[[
     local dac0 = self.pulse_0:sample() + self.pulse_1:sample()
     local dac0 = 0.00752 * dac0
