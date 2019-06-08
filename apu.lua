@@ -488,22 +488,20 @@ function MIXER:reset()
 end
 
 function MIXER:sample()
-  do
-    -- Formulas taken from https://wiki.nesdev.com/w/index.php/APU_Mixer
-    --[[
+  -- Formulas taken from https://wiki.nesdev.com/w/index.php/APU_Mixer
+  --[[
     local dac0 = self.pulse_0:sample() + self.pulse_1:sample()
     local dac0 = 0.00752 * dac0
     local dac1 = 0 --0.00851 * self.triangle:sample() + 0.00494 * self.noise:sample() + 0.00335 * self.dmc:sample()
     --]]
-    --[
-    local dac0 = self.pulse_0:sample() + self.pulse_1:sample()
-    local dac0 = 95.88 / ((8128 / dac0) + 100)
-    local dac1 =
-      159.79 /
-      (100 + 1 / ((self.triangle:sample() / 8227) + (self.noise:sample() / 12241) + (self.dmc:sample() / 22638)))
-    --]]
-    return (dac0 + dac1)
-  end
+  --[
+  local dac0 = self.pulse_0:sample() + self.pulse_1:sample()
+  local dac0 = 95.88 / ((8128 / dac0) + 100)
+  local dac1 =
+    159.79 / (100 + 1 / ((self.triangle:sample() / 8227) + (self.noise:sample() / 12241) + (self.dmc:sample() / 22638)))
+  --]]
+  return (dac0 + dac1)
+  --[[
   local dac0 = self.pulse_0:sample() + self.pulse_1:sample()
   local dac1 = self.triangle:sample() + self.noise:sample() + self.dmc:sample()
   local sample =
@@ -522,6 +520,7 @@ function MIXER:sample()
     sample = 0x7fff
   end
   return sample
+  --]]
 end
 
 local Oscillator = UTILS.class()
