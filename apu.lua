@@ -497,8 +497,8 @@ function MIXER:sample()
   --[
   local dac0 = self.pulse_0:sample() + self.pulse_1:sample()
   local dac0 = 95.88 / ((8128 / dac0) + 100)
-  local dac1 =
-    159.79 / (100 + 1 / ((self.triangle:sample() / 8227) + (self.noise:sample() / 12241) + (self.dmc:sample() / 22638)))
+  -- TODO: DMC (For some reason it sounds really bad)
+  local dac1 = 159.79 / (159 + 1 / ((self.triangle:sample() / 8227) + (self.noise:sample() / 12241))) --+ (self.dmc:sample() / 22638)))
   --]]
   return (dac0 + dac1)
   --[[
@@ -749,12 +749,15 @@ function Pulse:sample()
         sum = sum + v * self.form[self.step]
         self.timer = self.timer + self.freq
       until self.timer > 0
-      self.amp = (sum * self.envelope.output + self.rate / 2) / self.rate
+      self.amp = (sum * self.envelope.output) / self.rate
     else
       self.amp = self.envelope.output * self.form[self.step]
     end
   else
-    self.amp = 0
+    if self.amp < APU.CHANNEL_OUTPUT_DECAY then
+      return 0
+    end
+    self.amp = self.amp - APU.CHANNEL_OUTPUT_DECAY
   end
   return self.amp
   --]]

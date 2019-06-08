@@ -131,7 +131,7 @@ local function drawAPUState()
     love.graphics.print(
         string.format(
             "F:%d D:%d V:%d  S:%d C:%d",
-            pulse_0.freq,
+            pulse_0.freq / 1000,
             pulse_0.duty,
             pulse_0.envelope.output / APU.CHANNEL_OUTPUT_MUL,
             pulse_0.step,
@@ -145,7 +145,7 @@ local function drawAPUState()
     love.graphics.print(
         string.format(
             "F:%d D:%d V:%d  S:%d C:%d",
-            pulse_1.freq,
+            pulse_1.freq / 1000,
             pulse_1.duty,
             pulse_1.envelope.output / APU.CHANNEL_OUTPUT_MUL,
             pulse_1.step,
