@@ -1,15 +1,17 @@
 # LuaNES
-NES emulator in lua+love based/inspired on optcarrot (https://github.com/mame/optcarrot).
+NES emulator in lua+love2d based/inspired on optcarrot (https://github.com/mame/optcarrot). Note that the emulator is written in pure lua(JIT) and it should be possible to write a "front end" for it in something other than love2d (Like games that embed lua and let you play audio/video from memory).
 
 # Running
 
-Get https://love2d.org/ and run `love . rom.nes` in the repo folder.
+Get https://love2d.org/ and run `love . path/to/rom.nes` in the repo folder.
 
 # Overview
 
-The NES basically has 3 "main" or big components: the PPU (Picture Processing Unit), CPU and APU (Audio Processing Unit).
-ROMs "map" their memory to CPU addreses with different mappers (Often mirroring memory), depending on a code in the rom header.
-main.lua is the love2d entrance point (And the only file with love specific code). nes.lua ties everything together. The cpu is fairly straightforward. The APU can be considered a dummy implementation, which is correct from the point of view of the program running, but currently doesnt output audio. The PPU generates the video output. The PPU, APU and pads are mapped to memory (Status bytes, read/write addresses, etc. Check #Reference more details).
+The NES basically has 3 "main" or big components: the [PPU](https://wiki.nesdev.com/w/index.php/PPU) (Picture Processing Unit), [CPU](https://wiki.nesdev.com/w/index.php/CPU) and APU (Audio Processing Unit https://wiki.nesdev.com/w/index.php/APU).
+ROMs "map" their memory to CPU addreses with different [mappers](https://wiki.nesdev.com/w/index.php/Mapper) (Often mirroring memory), depending on a code in the rom [header](https://wiki.nesdev.com/w/index.php/INES).
+main.lua is the love2d entrance point (And the only file with love2d specific code). nes.lua ties everything together. The cpu is fairly straightforward (You can find the instruction set [here](http://obelisk.me.uk/6502/reference.html)). The APU is very much not finished (Currently, it outputs something that sounds more-or-less correct, but it has a lot of issues). The PPU generates the expected video output (There's a test case that it doesnt "pass" for a very specific thing). The PPU, APU and pads are mapped to memory (Status bytes, read/write addresses, etc. Check #Reference more details and the nesdev for details).
+
+The pulse_test.asm file was assembled using [n65](https://github.com/safiire/n65).
 
 # Reference
 
@@ -20,6 +22,7 @@ https://github.com/mame/optcarrot/blob/master/doc/internal.md
 
 cpu instructions:
 
+http://obelisk.me.uk/6502/reference.html
 http://www.oxyron.de/html/opcodes02.html
 
 Other:
@@ -38,7 +41,7 @@ Wikipedia pages might also be helpful.
 
 # Progress
 
-Should be somewhat functional. Audio is not being output yet (I'm not sure if you can even stream raw samples in love2d), and the output from the APU hasn't been tested (At least the timing of it seems to be correct). It's also still not capping at 60 fps, so the speed will vary. Performance needs to improve a little bit more to be able to run at a somewhat stable 60fps.
+It should be fairly functional. I've managed to run Super Mario, Tetris and a number of "modern" open source ROMs. Audio has many issues, but is there. Video is almost always correct. The CPU emulation, as far as I've been able to tell, is completely correct. The most important things are probably fixing audio generation (The APU), adding the second controller, working on full savestates and normal saves, and maybe improving the love2d "frontend" (i.e a rom file selector instead of having to give it through the command line, and adding configuration for controller buttons).
 
 # Controls
 
