@@ -1,5 +1,5 @@
 # LuaNES
-NES emulator in lua+love2d based/inspired on optcarrot (https://github.com/mame/optcarrot). Note that the emulator is written in pure lua(JIT) and it should be possible to write a "front end" for it in something other than love2d (Like games that embed lua and let you play audio/video from memory).
+NES emulator in lua+love2d based/inspired on [optcarrot](https://github.com/mame/optcarrot). Note that the emulator is written in pure lua(JIT) and it should be possible to write a "front end" for it in something other than love2d (Like games that embed lua and let you play audio/video from memory).
 
 # Running
 
@@ -7,7 +7,7 @@ Get https://love2d.org/ and run `love . path/to/rom.nes` in the repo folder.
 
 # Overview
 
-The NES basically has 3 "main" or big components: the [PPU](https://wiki.nesdev.com/w/index.php/PPU) (Picture Processing Unit), [CPU](https://wiki.nesdev.com/w/index.php/CPU) and APU (Audio Processing Unit https://wiki.nesdev.com/w/index.php/APU).
+The NES basically has 3 "main" or big components: the [PPU](https://wiki.nesdev.com/w/index.php/PPU) (Picture Processing Unit), [CPU](https://wiki.nesdev.com/w/index.php/CPU) and [APU](https://wiki.nesdev.com/w/index.php/APU) (Audio Processing Unit).
 ROMs "map" their memory to CPU addreses with different [mappers](https://wiki.nesdev.com/w/index.php/Mapper) (Often mirroring memory), depending on a code in the rom [header](https://wiki.nesdev.com/w/index.php/INES).
 main.lua is the love2d entrance point (And the only file with love2d specific code). nes.lua ties everything together. The cpu is fairly straightforward (You can find the instruction set [here](http://obelisk.me.uk/6502/reference.html)). The APU is very much not finished (Currently, it outputs something that sounds more-or-less correct, but it has a lot of issues). The PPU generates the expected video output (There's a test case that it doesnt "pass" for a very specific thing). The PPU, APU and pads are mapped to memory (Status bytes, read/write addresses, etc. Check #Reference more details and the nesdev for details).
 
