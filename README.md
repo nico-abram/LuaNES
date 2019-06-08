@@ -1,5 +1,5 @@
 # LuaNES
-NES emulator in lua+love2d based/inspired on [optcarrot](https://github.com/mame/optcarrot). Note that the emulator is written in pure lua(JIT) and it should be possible to write a "front end" for it in something other than love2d (Like games that embed lua and let you play audio/video from memory).
+NES emulator in lua+love2d based/inspired on [optcarrot](https://github.com/mame/optcarrot). Note that the emulator is written in pure lua(JIT) and it should be possible to write a "front end" for it in something other than love2d (Like games that embed lua and let you play audio/video from memory). Here's what it looks like: https://streamable.com/x7f5u
 
 # Running
 
