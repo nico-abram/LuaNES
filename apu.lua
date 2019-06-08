@@ -462,7 +462,7 @@ function Envelope:write(data)
 end
 
 function Envelope:update_output()
-  self.output = (self.constant and self.volume_base or self.volume) * APU.CHANNEL_OUTPUT_MUL
+  self.output = (self.constant and self.volume_base or self.volume)
 end
 
 MIXER = UTILS.class()
@@ -502,7 +502,7 @@ function MIXER:sample()
       159.79 /
       (100 + 1 / ((self.triangle:sample() / 8227) + (self.noise:sample() / 12241) + (self.dmc:sample() / 22638)))
     --]]
-    return (dac0 + dac1) * 2 ^ 3
+    return (dac0 + dac1)
   end
   local dac0 = self.pulse_0:sample() + self.pulse_1:sample()
   local dac1 = self.triangle:sample() + self.noise:sample() + self.dmc:sample()
@@ -635,6 +635,7 @@ end
 function Pulse:reset()
   self._parent.reset(self)
   self.freq = self.fixed * 2
+  self.period_timer = (2048 - (self.freq / 1000)) * 4
   self.valid_freq = false
   self.step = 0
   self.form = Pulse.WAVE_FORM[1]
@@ -655,6 +656,7 @@ function Pulse:update_freq()
       self.wave_length + band(self.sweep_increase, rshift(self.wave_length, self.sweep_shift)) <= Pulse.MAX_FREQ
    then
     self.freq = (self.wave_length + 1) * 2 * self.fixed
+    self.period_timer = (2048 - (self.freq / 1000)) * 4
     self.valid_freq = true
   else
     self.valid_freq = false
@@ -714,28 +716,49 @@ function Pulse:clock_sweep(complement)
   self.sweep_count = self.sweep_rate
 end
 function Pulse:sample()
+  --[[
+  if self.is_active then
+    local rate = self.apu.settings_rate
+    local samples_per_frame = rate / 60
+    local cpu_clocks_per_frame = 29780
+    -- rate/60 samples _ 29780 clocks
+    -- 1 sample _ (29780*60)/rate clocks
+    local period_timer_decrement_per_frame = cpu_clocks_per_frame / samples_per_frame
+    self.period_timer = self.period_timer - period_timer_decrement_per_frame
+    if self.period_timer <= 0 then
+      self.period_timer = (2048 - (self.freq / 1000)) * 4
+      self.step = band((self.step + 1), 7)
+    end
+    self.amp = self.envelope.output * self.form[self.step]
+  else
+    self.amp = 0
+  end
+  return self.amp
+  --]]
+  --[
   local sum = self.timer
   self.timer = self.timer - self.rate
   if self.is_active then
     if self.timer < 0 then
-      sum = rshift(sum, self.form[self.step])
+      sum = sum * self.form[self.step]
       repeat
         local v = -self.timer
         if v > self.freq then
           v = self.freq
         end
         self.step = band((self.step + 1), 7)
-        sum = sum + rshift(v, self.form[self.step])
+        sum = sum + v * self.form[self.step]
         self.timer = self.timer + self.freq
       until self.timer > 0
       self.amp = (sum * self.envelope.output + self.rate / 2) / self.rate
     else
-      self.amp = rshift(self.envelope.output, self.form[self.step])
+      self.amp = self.envelope.output * self.form[self.step]
     end
   else
     self.amp = 0
   end
   return self.amp
+  --]]
 end
 
 Triangle = UTILS.class(Oscillator)
@@ -811,9 +834,9 @@ function Triangle:sample()
         sum = sum + v * Triangle.WAVE_FORM[self.step]
         self.timer = self.timer + self.freq
       until not (self.timer < 0)
-      self.amp = (sum * APU.CHANNEL_OUTPUT_MUL + self.rate / 2) / self.rate * 3
+      self.amp = (sum + self.rate / 2) / self.rate
     else
-      self.amp = Triangle.WAVE_FORM[self.step] * APU.CHANNEL_OUTPUT_MUL * 3
+      self.amp = Triangle.WAVE_FORM[self.step]
     end
   else
     if self.amp < APU.CHANNEL_OUTPUT_DECAY then
