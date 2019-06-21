@@ -45,7 +45,7 @@ function love.load(arg)
     )
     --Nes:run()
     Nes:reset()
-    love.window.setMode(width, height, {resizable = true, minwidth = width, minheight = height})
+    love.window.setMode(width, height, {resizable = true, minwidth = width, minheight = height, vsync = false})
     local samplerate = 44100
     local bits = 16
     local channels = 1
@@ -82,13 +82,14 @@ end
 love.frame = 0
 local time = 0
 local timeTwo = 0
-local rate = 1 / 62.5
+local rate = 1 / 59.94
 local fps = 0
-local fpstmp = 0
+local tickRate = 0
+local tickRatetmp = 0
 local pixelCount = PPU.SCREEN_HEIGHT * PPU.SCREEN_WIDTH
 local function update()
     drawn = true
-    fpstmp = fpstmp + 1
+    tickRatetmp = tickRatetmp + 1
     for i, v in ipairs(keyEvents) do
         Nes.pads[v[1]](Nes.pads, 1, v[2])
     end
@@ -105,7 +106,8 @@ local function drawScreen()
     local sx = love.graphics.getWidth() / image:getWidth()
     local sy = love.graphics.getHeight() / image:getHeight()
     love.graphics.draw(image, 0, 0, 0, sx, sy)
-    love.graphics.print(" Nes FPS: " .. tostring(fps), 10, 10)
+    love.graphics.print(" Nes Tick Rate: " .. tostring(tickRate), 10, 10)
+    love.graphics.print(" FPS: " .. tostring(fps), 10, 30)
 end
 local function drawPalette()
     local palette = Nes.cpu.ppu.output_color
@@ -166,25 +168,23 @@ function love.draw()
     --[
     time = time + love.timer.getDelta()
     timeTwo = timeTwo + love.timer.getDelta()
-    if time > rate then
-        time = 0
+    while time > rate do
+        time = time - rate
         update()
-    else
-        draw()
-        return
     end
     if timeTwo > 1 then
         timeTwo = 0
-        fps = fpstmp
-        fpstmp = 0
+        tickRate = tickRatetmp
+        tickRatetmp = 0
     end
+    fps = 1 / love.timer.getDelta()
     --]]
     --[[
     timeTwo = timeTwo + love.timer.getDelta()
     if timeTwo > 1 then
         timeTwo = 0
-        fps = fpstmp
-        fpstmp = 0
+        tickRate = tickRatetmp
+        tickRatetmp = 0
     end
     update()
     --]]
@@ -216,5 +216,6 @@ function love.draw()
         --]]
     end
     image:replacePixels(imageData)
+
     draw()
 end
