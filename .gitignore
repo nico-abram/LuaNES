@@ -6,3 +6,7 @@ audio.wav
 video.png
 hello.nes
 run100frames.lua
+/love
+dump.txt
+/jit
+/.vscode

@@ -8,7 +8,7 @@ local map, rotatePositiveIdx, nthBitIsSet, nthBitIsSetInt, range =
 
 PPU = {}
 local PPU = PPU
-PPU._mt = {__index = PPU}
+PPU._mt = { __index = PPU }
 function PPU:new(conf, cpu, palette)
     local ppu = {}
     setmetatable(ppu, PPU._mt)
@@ -35,7 +35,7 @@ PPU.RP2C02_HVSYNC_0 = PPU.RP2C02_VSYNC * PPU.RP2C02_HSYNC
 PPU.RP2C02_HVSYNC_1 = PPU.RP2C02_VSYNC * PPU.RP2C02_HSYNC - PPU.RP2C02_CC
 
 -- special scanlines
-PPU.SCANLINE_HDUMMY = -1 -- pre-render scanline
+PPU.SCANLINE_HDUMMY = -1  -- pre-render scanline
 PPU.SCANLINE_VBLANK = 240 -- post-render scanline
 
 -- special horizontal clocks
@@ -44,7 +44,7 @@ PPU.HCLOCK_VBLANK_0 = 681
 PPU.HCLOCK_VBLANK_1 = 682
 PPU.HCLOCK_VBLANK_2 = 684
 PPU.HCLOCK_BOOT = 685
-PPU.DUMMY_FRAME = {PPU.RP2C02_HVINT / PPU.RP2C02_CC - PPU.HCLOCK_DUMMY, PPU.RP2C02_HVINT, PPU.RP2C02_HVSYNC_0}
+PPU.DUMMY_FRAME = { PPU.RP2C02_HVINT / PPU.RP2C02_CC - PPU.HCLOCK_DUMMY, PPU.RP2C02_HVINT, PPU.RP2C02_HVSYNC_0 }
 PPU.BOOT_FRAME = {
     PPU.RP2C02_HVSYNCBOOT / PPU.RP2C02_CC - PPU.HCLOCK_BOOT,
     PPU.RP2C02_HVSYNCBOOT,
@@ -53,41 +53,41 @@ PPU.BOOT_FRAME = {
 
 -- constants related to OAM (sprite)
 PPU.SP_PIXEL_POSITIONS = {
-    {3, 7, 2, 6, 1, 5, 0, 4}, -- normal
-    {4, 0, 5, 1, 6, 2, 7, 3} -- flip
+    { 3, 7, 2, 6, 1, 5, 0, 4 }, -- normal
+    { 4, 0, 5, 1, 6, 2, 7, 3 }  -- flip
 }
 
 -- A look-up table mapping: (two pattern bytes * attr) -> eight pixels
 --   TILE_LUT[attr][high_byte * 0x100 + low_byte] = [pixels] * 8
 PPU.TILE_LUT =
     map(
-    {0x0, 0x4, 0x8, 0xc},
-    function(attr)
-        return UTILS.transpose(
-            map(
-                range(0, 7),
-                function(j)
-                    return map(
-                        range(0, 0x10000),
-                        function(i)
-                            local clr = nthBitIsSetInt(i, 15 - j) * 2 + nthBitIsSetInt(i, 7 - j)
-                            return clr ~= 0 and bor(attr, clr) or 0
-                        end
-                    )
-                end
+        { 0x0, 0x4, 0x8, 0xc },
+        function(attr)
+            return UTILS.transpose(
+                map(
+                    range(0, 7),
+                    function(j)
+                        return map(
+                            range(0, 0x10000),
+                            function(i)
+                                local clr = nthBitIsSetInt(i, 15 - j) * 2 + nthBitIsSetInt(i, 7 - j)
+                                return clr ~= 0 and bor(attr, clr) or 0
+                            end
+                        )
+                    end
+                )
             )
-        )
-    end
-)
+        end
+    )
 local TILE_LUT,
-    HCLOCK_BOOT,
-    HCLOCK_DUMMY,
-    BOOT_FRAME,
-    DUMMY_FRAME,
-    FOREVER_CLOCK,
-    SCANLINE_VBLANK,
-    SCANLINE_HDUMMY,
-    RP2C02_CC =
+HCLOCK_BOOT,
+HCLOCK_DUMMY,
+BOOT_FRAME,
+DUMMY_FRAME,
+FOREVER_CLOCK,
+SCANLINE_VBLANK,
+SCANLINE_HDUMMY,
+RP2C02_CC =
     PPU.TILE_LUT,
     PPU.HCLOCK_BOOT,
     PPU.HCLOCK_DUMMY,
@@ -105,21 +105,21 @@ function PPU:initialize(conf, cpu, palette)
     self.cpu = cpu
     self.palette = palette
 
-    self.nmt_mem = {[0] = UTILS.fill({}, 0xff, 0x400, 1, -1), [1] = UTILS.fill({}, 0xff, 0x400, 1, -1)}
+    self.nmt_mem = { [0] = UTILS.fill({}, 0xff, 0x400, 1, -1), [1] = UTILS.fill({}, 0xff, 0x400, 1, -1) }
     --[  [0xff] * 0x400, [0xff] * 0x400]
     self.nmt_ref =
         map(
-        {[0] = 0, [1] = 1, [2] = 0, [3] = 1},
-        function(i)
-            return self.nmt_mem[i]
-        end
-    )
+            { [0] = 0, [1] = 1, [2] = 0, [3] = 1 },
+            function(i)
+                return self.nmt_mem[i]
+            end
+        )
 
     --self.output_pixels = {}
     self.output_pixels = UTILS.fill({}, self.palette[16], PPU.SCREEN_HEIGHT * PPU.SCREEN_WIDTH)
 
     self.output_pixels_size = 0
-    self.output_color = UTILS.fill({}, {self.palette[1]}, 0x20) -- palette size is 0x20
+    self.output_color = UTILS.fill({}, { self.palette[1] }, 0x20) -- palette size is 0x20
     self:reset(true)
     self:setup_lut()
 end
@@ -255,7 +255,7 @@ function PPU:reset(mapping)
     self.bg_show_edge = false
     self.bg_pixels = UTILS.fill({}, 0, 16)
     self.bg_pixels_idx = 0
-    self.bg_pattern_base = 0 -- == 0 or 0x1000
+    self.bg_pattern_base = 0    -- == 0 or 0x1000
     self.bg_pattern_base_15 = 0 -- == self.bg_pattern_base[12] << 15
     self.bg_pattern = 0
     self.bg_pattern_lut = TILE_LUT[1]
@@ -293,11 +293,11 @@ function PPU:reset(mapping)
     self.sp_map = {} -- [[behind?, zero?, color]]
     self.sp_map_buffer =
         map(
-        range(0, 264),
-        function()
-            return {false, false, 0}
-        end
-    ) -- preallocation for self.sp_map
+            range(0, 264),
+            function()
+                return { false, false, 0 }
+            end
+        ) -- preallocation for self.sp_map
     self.sp_zero_in_line = false
 end
 
@@ -313,59 +313,59 @@ function PPU:setup_lut()
 
     self.name_lut =
         map(
-        range(0, 0xffff),
-        function(i)
-            local nmt_bank = self.nmt_ref[band(rshift(i, 10), 3)]
-            local nmt_idx = band(i, 0x03ff)
-            local fixed = bor(band(rshift(i, 12), 7), lshift(nthBitIsSetInt(i, 15), 12))
-            if not self.lut_update[nmt_bank] then
-                self.lut_update[nmt_bank] = {}
+            range(0, 0xffff),
+            function(i)
+                local nmt_bank = self.nmt_ref[band(rshift(i, 10), 3)]
+                local nmt_idx = band(i, 0x03ff)
+                local fixed = bor(band(rshift(i, 12), 7), lshift(nthBitIsSetInt(i, 15), 12))
+                if not self.lut_update[nmt_bank] then
+                    self.lut_update[nmt_bank] = {}
+                end
+                if not self.lut_update[nmt_bank][nmt_idx] then
+                    self.lut_update[nmt_bank][nmt_idx] = { nil, nil }
+                end
+                local upd = self.lut_update[nmt_bank][nmt_idx]
+                if not upd[1] then
+                    upd[1] = {}
+                end
+                upd = upd[1]
+                upd[#upd + 1] = { i, fixed }
+                return bor(lshift(nmt_bank[nmt_idx], 4), fixed)
             end
-            if not self.lut_update[nmt_bank][nmt_idx] then
-                self.lut_update[nmt_bank][nmt_idx] = {nil, nil}
-            end
-            local upd = self.lut_update[nmt_bank][nmt_idx]
-            if not upd[1] then
-                upd[1] = {}
-            end
-            upd = upd[1]
-            upd[#upd + 1] = {i, fixed}
-            return bor(lshift(nmt_bank[nmt_idx], 4), fixed)
-        end
-    )
+        )
 
     local entries = {}
     self.attr_lut =
         map(
-        range(0, 0x7fff),
-        function(i)
-            local io_addr = bor(0x23c0, band(i, 0x0c00), band(rshift(i, 4), 0x0038), band(rshift(i, 2), 0x0007))
-            local nmt_bank = self.nmt_ref[band(rshift(io_addr, 10), 3)]
-            local nmt_idx = band(io_addr, 0x03ff)
-            local attr_shift = bor(band(i, 2), band(rshift(i, 4), 4))
-            local key = tostring(io_addr) .. "-" .. tostring(attr_shift)
-            if not entries[key] then
-                entries[key] = {
-                    io_addr,
-                    TILE_LUT[1 + band(rshift(nmt_bank[nmt_idx], attr_shift), 3)],
-                    attr_shift
-                }
+            range(0, 0x7fff),
+            function(i)
+                local io_addr = bor(0x23c0, band(i, 0x0c00), band(rshift(i, 4), 0x0038), band(rshift(i, 2), 0x0007))
+                local nmt_bank = self.nmt_ref[band(rshift(io_addr, 10), 3)]
+                local nmt_idx = band(io_addr, 0x03ff)
+                local attr_shift = bor(band(i, 2), band(rshift(i, 4), 4))
+                local key = tostring(io_addr) .. "-" .. tostring(attr_shift)
+                if not entries[key] then
+                    entries[key] = {
+                        io_addr,
+                        TILE_LUT[1 + band(rshift(nmt_bank[nmt_idx], attr_shift), 3)],
+                        attr_shift
+                    }
+                end
+                if not self.lut_update[nmt_bank] then
+                    self.lut_update[nmt_bank] = {}
+                end
+                if not self.lut_update[nmt_bank][nmt_idx] then
+                    self.lut_update[nmt_bank][nmt_idx] = { nil, nil }
+                end
+                local upd = self.lut_update[nmt_bank][nmt_idx]
+                if not upd[2] then
+                    upd[2] = {}
+                end
+                upd = upd[2]
+                upd[#upd + 1] = entries[key]
+                return entries[key]
             end
-            if not self.lut_update[nmt_bank] then
-                self.lut_update[nmt_bank] = {}
-            end
-            if not self.lut_update[nmt_bank][nmt_idx] then
-                self.lut_update[nmt_bank][nmt_idx] = {nil, nil}
-            end
-            local upd = self.lut_update[nmt_bank][nmt_idx]
-            if not upd[2] then
-                upd[2] = {}
-            end
-            upd = upd[2]
-            upd[#upd + 1] = entries[key]
-            return entries[key]
-        end
-    )
+        )
     return entries
 end
 
@@ -378,11 +378,11 @@ function PPU:set_chr_mem(mem, writable)
 end
 
 PPU.NMT_TABLE = {
-    horizontal = {0, 0, 1, 1},
-    vertical = {0, 1, 0, 1},
-    four_screen = {0, 1, 2, 3},
-    first = {0, 0, 0, 0},
-    second = {1, 1, 1, 1}
+    horizontal = { 0, 0, 1, 1 },
+    vertical = { 0, 1, 0, 1 },
+    four_screen = { 0, 1, 2, 3 },
+    first = { 0, 0, 0, 0 },
+    second = { 1, 1, 1, 1 }
 }
 function PPU:nametables(mode)
     self:update(RP2C02_CC)
@@ -394,7 +394,7 @@ function PPU:nametables(mode)
                 return self.nmt_ref[i] == self.nmt_mem[idxs[i + 1]]
             end
         )
-     then
+    then
         return
     end
     self.nmt_ref[0] = self.nmt_mem[idxs[1]]
@@ -564,8 +564,8 @@ function PPU:poke_2001(_addr, data)
 
     if
         bg_show_old ~= self.bg_show or bg_show_edge_old ~= self.bg_show_edge or sp_show_old ~= self.sp_show or
-            sp_show_edge_old ~= self.sp_show_edge
-     then
+        sp_show_edge_old ~= self.sp_show_edge
+    then
         if self.hclk < 8 or self.hclk >= 248 then
             self:update_enabled_flags_edge()
         else
@@ -600,6 +600,7 @@ function PPU:peek_2002(_addr)
     self.vblank = false
     return self.io_latch
 end
+
 -- OAMADDR
 function PPU:poke_2003(_addr, data)
     self:update(RP2C02_CC)
@@ -619,9 +620,9 @@ end
 function PPU:peek_2004(_addr)
     if
         not self.any_show or
-            self.cpu:current_clock() - (self.cpu:next_frame_clock() - (341 * 241) * RP2C02_CC) >=
-                (341 * 240) * RP2C02_CC
-     then
+        self.cpu:current_clock() - (self.cpu:next_frame_clock() - (341 * 241) * RP2C02_CC) >=
+        (341 * 240) * RP2C02_CC
+    then
         self.io_latch = self.sp_ram[self.regs_oam + 1]
     else
         self:update(RP2C02_CC)
@@ -739,8 +740,8 @@ function PPU:poke_4014(_addr, data) -- DMA
     data = lshift(data, 8)
     if
         self.regs_oam == 0 and data < 0x2000 and
-            ((not self.any_show) or self.cpu:current_clock() <= PPU.RP2C02_HVINT - CPU.CLK[1] * 512)
-     then
+        ((not self.any_show) or self.cpu:current_clock() <= PPU.RP2C02_HVINT - CPU.CLK[1] * 512)
+    then
         self.cpu:steal_clocks(CPU.CLK[1] * 512)
         self.cpu:sprite_dma(band(data, 0x7ff), self.sp_ram)
         self.io_latch = self.sp_ram[0xff + 1]
@@ -791,10 +792,10 @@ function PPU:load_sprite(pat0, pat1, buffer_idx)
     local pos = PPU.SP_PIXEL_POSITIONS[1 + nthBitIsSetInt(byte2, 6)] -- OAM byte2 bit6: "Flip horizontally" flag
     local pat =
         bor(
-        band(rshift(pat0, 1), 0x55),
-        band(pat1, 0xaa),
-        lshift(bor(band(pat0, 0x55), band(lshift(pat1, 1), 0xaa)), 8)
-    )
+            band(rshift(pat0, 1), 0x55),
+            band(pat1, 0xaa),
+            lshift(bor(band(pat0, 0x55), band(lshift(pat1, 1), 0xaa)), 8)
+        )
     local x_base = sp_buffer[buffer_idx + 4]
     local palette_base = 0x10 + lshift(band(byte2, 3), 2) -- OAM byte2 bit0-1: Palette
     if not self.sp_visible then
@@ -824,9 +825,9 @@ end
 
 function PPU:do_update_address_line()
     if self.a12_monitor then
-        local a12_state = self.io_addr[12] == 1
+        local a12_state = band(self.io_addr, 0x1000) == 0x1000
         if not self.a12_state and a12_state then
-            self.a12_monitor.a12_signaled((self.vclk + self.hclk) * RP2C02_CC)
+            self.a12_monitor:a12_signaled((self.vclk + self.hclk) * RP2C02_CC)
         end
         self.a12_state = a12_state
     end
@@ -874,6 +875,10 @@ function PPU:fetch_bg_pattern_0()
         return
     end
     self.bg_pattern = self.chr_mem[1 + band(self.io_addr, 0x1fff)]
+    if self.bg_pattern == nil then
+        x = x
+        -- self.chr_mem[6145]
+    end
 end
 
 function PPU:fetch_bg_pattern_1()
@@ -1196,6 +1201,7 @@ function PPU:update_enabled_flags_edge()
     self.batch_render_eight_pixels =
         sp_active and self.batch_render_eight_pixels_sp or self.batch_render_eight_pixels_bg
 end
+
 ------------------------------------------------------------------------------------------------------------------------------------------------------
 -- default core
 
@@ -1207,7 +1213,7 @@ function PPU:debug_logging(scanline, hclk, hclk_target)
         hclk_target = "forever"
     end
 
-    self.conf.debug("ppu: scanline --{ scanline }, hclk --{ hclk }->--{ hclk_target }")
+    print("ppu: scanline --{ scanline }, hclk --{ hclk }->--{ hclk_target }")
 end
 
 function PPU:run()
@@ -1504,6 +1510,7 @@ function PPU:render_scanline()
         self:wait_one_clock()
     end
 end
+
 function PPU:post_render_scanline()
     for i = 1, 8 do
         --256.step(312, 8) do
@@ -1567,6 +1574,7 @@ function PPU:post_render_scanline()
         self:wait_one_clock()
     end
 end
+
 function PPU:post_render()
     -- when 681
     self:vblank_0()
@@ -1580,6 +1588,7 @@ function PPU:post_render()
     self:vblank_2()
     self:wait_frame()
 end
+
 function PPU:main_loop()
     -- when 685
 

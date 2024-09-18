@@ -2,7 +2,7 @@ if pcall(require, "jit.opt") then
     require("jit.opt").start(
         "maxmcode=8192",
         "maxtrace=2000"
-        --
+    --
     )
 end
 require "nes"
@@ -12,46 +12,74 @@ local height = 240
 local pixSize = 1
 local lastSource
 local sound = false
-local DEBUG = false
+local IS_DEBUG = false
+
+-- Just for IDE intellisense
+if not love then
+    love = {}
+end
+
+local loveErrorhandler = love.errorhandler or love.errhand
+local vscode_debugger = os.getenv("LOCAL_LUA_DEBUGGER_VSCODE") == "1"
+function love.errorhandler(msg)
+    if vscode_debugger then
+        error(msg, 2)
+    else
+        return loveErrorhandler(msg)
+    end
+end
+
 function love.load(arg)
+    if vscode_debugger then
+        require("lldebugger").start()
+    end
     --[[
     love.profiler = require("libs/profile")
     love.profiler.hookall("Lua")
     love.profiler.start()
     --]]
     local file = arg[1] or " "
-    local loglvl = loadstring("return " .. (arg[2] or "0"))
-    loglvl = loglvl and loglvl()
-    DEBUG = not (not (loadstring("return " .. (arg[3] or "false"))))
-    local pc = loadstring("return " .. (arg[4] or ""))
-    pc = pc and pc()
+    local loglvl = arg[2] and tonumber(arg[2]) or 0
+    if arg[3] == "true" then
+        IS_DEBUG = true
+    end
+    if vscode_debugger then
+        IS_DEBUG = true
+    end
+    local pc = nil
+    if arg[4] and string.sub(arg[4], 1, 3) == "0x" then
+        pc = tonumber(string.sub(arg[4], 3), 16)
+    elseif arg[4] then
+        pc = tonumber(arg[4])
+    end
     imageData = love.image.newImageData(width * pixSize + 1, height * pixSize + 1)
     image = love.graphics.newImage(imageData)
     love.window.setTitle("LuaNEs")
     --Nes = NES:new({file="tests/hello.nes", loglevel=5})
     Nes =
         NES:new(
-        {
-            file = file,
-            loglevel = loglvl,
-            pc = pc,
-            palette = UTILS.map(
-                PALETTE:defacto_palette(),
-                function(c)
-                    return {c[1] / 256, c[2] / 256, c[3] / 256}
-                end
-            )
-        }
-    )
+            {
+                file = file,
+                loglevel = loglvl,
+                pc = pc,
+                palette = UTILS.map(
+                    PALETTE:defacto_palette(),
+                    function(c)
+                        return { c[1] / 256, c[2] / 256, c[3] / 256 }
+                    end
+                )
+            }
+        )
     --Nes:run()
     Nes:reset()
-    love.window.setMode(width, height, {resizable = true, minwidth = width, minheight = height, vsync = false})
+    love.window.setMode(width, height, { resizable = true, minwidth = width, minheight = height, vsync = false })
     local samplerate = 44100
     local bits = 16
     local channels = 1
     sound = love.sound.newSoundData(samplerate / 60 + 1, samplerate, bits, channels)
     QS = love.audio.newQueueableSource(samplerate, bits, channels)
 end
+
 local keyEvents = {}
 local keyButtons = {
     ["w"] = Pad.UP,
@@ -66,7 +94,7 @@ local keyButtons = {
 function love.keypressed(key)
     for k, v in pairs(keyButtons) do
         if k == key then
-            keyEvents[#keyEvents + 1] = {"keydown", v}
+            keyEvents[#keyEvents + 1] = { "keydown", v }
         end
     end
 end
@@ -74,7 +102,7 @@ end
 function love.keyreleased(key)
     for k, v in pairs(keyButtons) do
         if k == key then
-            keyEvents[#keyEvents + 1] = {"keyup", v}
+            keyEvents[#keyEvents + 1] = { "keyup", v }
         end
     end
 end
@@ -159,7 +187,7 @@ local function drawAPUState()
 end
 local function draw()
     drawScreen()
-    if DEBUG then
+    if IS_DEBUG then
         drawPalette()
         drawAPUState()
     end
@@ -168,10 +196,13 @@ function love.draw()
     --[
     time = time + love.timer.getDelta()
     timeTwo = timeTwo + love.timer.getDelta()
+    --[[
+    --]]
     while time > rate do
         time = time - rate
         update()
     end
+    --update()
     if timeTwo > 1 then
         timeTwo = 0
         tickRate = tickRatetmp

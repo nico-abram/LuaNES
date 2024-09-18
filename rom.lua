@@ -11,7 +11,7 @@ local map, rotatePositiveIdx, nthBitIsSet, nthBitIsSetInt, range, bind =
 
 ROM = {}
 local ROM = ROM
-ROM._mt = {__index = ROM}
+ROM._mt = { __index = ROM }
 
 --[[
     There are different ROM mappers that map the ROM PRG and CHR memory to CP addresses.
@@ -36,7 +36,7 @@ function ROM:initialize(conf, cpu, ppu, basename, bytes, str)
     local prg_count, chr_count, wrk_count
     do
         local header_size = 16
-        prg_count, chr_count, wrk_count = self:parse_header({unpack(bytes, idx + 1, idx + header_size)}, str)
+        prg_count, chr_count, wrk_count = self:parse_header({ unpack(bytes, idx + 1, idx + header_size) }, str)
         idx = header_size
     end
     self.prg_banks = {}
@@ -133,9 +133,9 @@ function ROM:save_battery()
     assert(out:close())
 end
 
-function ROM:new(conf, cpu, ppu, basename, bytes, str)
+function ROM:new(conf, cpu, ppu, basename, bytes, str, custom_metatable)
     local rom = {}
-    setmetatable(rom, ROM._mt)
+    setmetatable(rom, custom_metatable or ROM._mt)
     rom:initialize(conf, cpu, ppu, basename, bytes, str)
     return rom
 end
@@ -202,13 +202,16 @@ function ROM:parse_header(buf, str)
 end
 
 local UxROM = {}
-UxROM._mt = {__index = UxROM}
-setmetatable(UxROM, {__index = ROM})
+UxROM._mt = { __index = UxROM }
+setmetatable(UxROM, { __index = ROM })
 function UxROM:new(...)
-    local rom = ROM:new(unpack(...))
+    local args = { ... }
+    table.insert(args, UxROM._mt)
+    local rom = ROM:new(unpack(args))
     setmetatable(rom, UxROM._mt)
     return rom
 end
+
 function UxROM:reset()
     self.cpu:add_mappings(range(0x8000, 0xffff), UTILS.tGetter(self.prg_ref), bind(self.poke_8000, self))
 end
@@ -219,16 +222,20 @@ function UxROM:poke_8000(_addr, data)
         self.prg_ref[i] = self.prg_banks[j][i - 0x8000]
     end
 end
+
 ROM.MAPPER_DB[0x02] = UxROM
 
 local CNROM = {}
-CNROM._mt = {__index = CNROM}
-setmetatable(CNROM, {__index = ROM})
+CNROM._mt = { __index = CNROM }
+setmetatable(CNROM, { __index = ROM })
 function CNROM:new(...)
-    local rom = ROM:new(unpack(...))
+    local args = { ... }
+    table.insert(args, CNROM._mt)
+    local rom = ROM:new(unpack(args))
     setmetatable(rom, CNROM._mt)
     return rom
 end
+
 function CNROM:reset()
     self.cpu:add_mappings(
         range(0x8000, 0xffff),
@@ -239,13 +246,14 @@ end
 
 function CNROM:poke_8000(_addr, data)
     local j = band(data, 3)
-    self.chr_ref = {unpack(self.chr_banks[j])}
+    self.chr_ref = { unpack(self.chr_banks[j]) }
 end
+
 ROM.MAPPER_DB[0x03] = CNROM
 
 local MMC1 = {}
-MMC1._mt = {__index = MMC1}
-setmetatable(MMC1, {__index = ROM})
+MMC1._mt = { __index = MMC1 }
+setmetatable(MMC1, { __index = ROM })
 function MMC1:new(...)
     local rom = {}
     setmetatable(rom, MMC1._mt)
@@ -253,9 +261,9 @@ function MMC1:new(...)
     return rom
 end
 
-local NMT_MODE = {"first", "second", "vertical", "horizontal"}
-local PRG_MODE = {"conseq", "conseq", "fix_first", "fix_last"}
-local CHR_MODE = {"conseq", "noconseq"}
+local NMT_MODE = { "first", "second", "vertical", "horizontal" }
+local PRG_MODE = { "conseq", "conseq", "fix_first", "fix_last" }
+local CHR_MODE = { "conseq", "noconseq" }
 
 function MMC1:init()
     self.chr_mode = nil
@@ -401,13 +409,16 @@ function MMC1:update_chr(chr_mode, chr_bank_0, chr_bank_1)
         self.chr_ref[i + 0x1000] = self.chr_banks[upper][i]
     end
 end
+
 ROM.MAPPER_DB[0x01] = MMC1
 
 local MMC3 = {}
-MMC3._mt = {__index = MMC3}
-setmetatable(MMC3, {__index = ROM})
+MMC3._mt = { __index = MMC3 }
+setmetatable(MMC3, { __index = ROM })
 function MMC3:new(...)
-    local rom = ROM:new(unpack(...))
+    local args = { ... }
+    table.insert(args, MMC3._mt)
+    local rom = ROM:new(unpack(args))
     setmetatable(rom, MMC3._mt)
     return rom
 end
@@ -416,10 +427,46 @@ function MMC3:init(rev) -- rev = :A or :B or :C
     rev = rev or "B"
     self.persistant = rev ~= "A"
 
-    self.prg_banks = self.prg_banks.flatten.each_slice(0x2000).to_a
+    --self.prg_banks = self.prg_banks.flatten.each_slice(0x2000).to_a
+    local new_banks = { {} }
+    local new_bank = new_banks[1]
+    local new_bank_i = 1
+    local new_bank_j = 1
+    for i = 1, #(self.prg_banks) do
+        local old_bank = self.prg_banks[i]
+        for j = 1, #old_bank do
+            if new_bank_j == 0x2001 then
+                new_bank_j = 1
+                new_bank_i = new_bank_i + 1
+                new_bank = {}
+                new_banks[new_bank_i] = new_bank
+            end
+            new_bank[new_bank_j] = old_bank[j]
+            new_bank_j = new_bank_j + 1
+        end
+    end
+    self.prg_banks = new_banks
     self.prg_bank_swap = false
 
-    self.chr_banks = self.chr_banks.flatten.each_slice(0x0400).to_a
+    --self.chr_banks = self.chr_banks.flatten.each_slice(0x0400).to_a
+    local new_banks = { {} }
+    local new_bank = new_banks[1]
+    local new_bank_i = 1
+    local new_bank_j = 1
+    for i = 1, #(self.chr_banks) do
+        local old_bank = self.chr_banks[i]
+        for j = 1, #old_bank do
+            if new_bank_j == 0x0401 then
+                new_bank_j = 1
+                new_bank_i = new_bank_i + 1
+                new_bank = {}
+                new_banks[new_bank_i] = new_bank
+            end
+            new_bank[new_bank_j] = old_bank[j]
+            new_bank_j = new_bank_j + 1
+        end
+    end
+    self.chr_banks = new_banks
     self.chr_bank_mapping = UTILS.fill({}, nil, 8)
     self.chr_bank_swap = false
 end
@@ -468,11 +515,12 @@ end
 -- 0xe000..0xffff: 3 3
 function MMC3:update_prg(addr, bank)
     bank = bank % (#self.prg_banks)
-    if self.prg_bank_swap and addr[13] == 0 then
+    if self.prg_bank_swap and band(addr[13], 0x2000) == 0 then
         addr = bxor(addr, 0x4000)
     end
-    for i = addr + 1, addr + 0x2000 + 1 do
-        self.prg_ref[i] = self.prg_banks[bank][i - addr]
+    --self.prg_ref[1 + bank] = self.prg_banks[1 + bank]
+    for i = addr + 1, addr + 0x2000 do
+        self.prg_ref[i] = self.prg_banks[1 + bank][i - addr]
     end
 end
 
@@ -482,39 +530,46 @@ function MMC3:update_chr(addr, bank)
     end
     local idx = addr / 0x400
     bank = bank % (#self.chr_banks)
-    if self.chr_bank_mapping[idx] == bank then
+    if self.chr_bank_mapping[idx + 1] == bank then
         return
     end
     if self.chr_bank_swap then
         addr = bxor(addr, 0x1000)
     end
     self.ppu:update(0)
-    for i = 1, 0x400 + 1 do
-        self.chr_ref[i + addr] = self.chr_banks[bank][i]
+    for i = 1, 0x400 do
+        self.chr_ref[i + addr] = self.chr_banks[bank + 1][i]
     end
     self.chr_bank_mapping[idx] = bank
 end
 
 function MMC3:poke_8000(_addr, data)
     self.reg_select = band(data, 7)
-    local prg_bank_swap = data[6] == 1
-    local chr_bank_swap = data[7] == 1
+    local prg_bank_swap = band(data, 0x40) == 0x40
+    local chr_bank_swap = band(data, 0x80) == 0x80
 
     if prg_bank_swap ~= self.prg_bank_swap then
         self.prg_bank_swap = prg_bank_swap
+        for i = 1, 0x2000 do
+            local tmp = self.prg_ref[i + 0x8000]
+            self.prg_ref[i + 0x8000] = self.prg_ref[i + 0xc000]
+            self.prg_ref[i + 0xc000] = tmp
+        end
+        --[[
         for i = 0x8000 + 1, 0x8000 + 0x2000 + 1 do
-            self.prg_ref[i] = self.prg_ref[bank][i - 0x8000 + 0xc000]
+            self.prg_ref[i] = self.prg_ref[i - 0x8000 + 0xc000]
         end
         for i = 0xc000 + 1, 0xc000 + 0x2000 + 1 do
-            self.chr_ref[i] = self.prg_ref[bank][i - 0xc000 + 0x8000]
+            self.chr_ref[i] = self.prg_ref[i - 0xc000 + 0x8000]
         end
-    --self.prg_ref[0x8000, 0x2000], self.prg_ref[0xc000, 0x2000] = self.prg_ref[0xc000, 0x2000], self.prg_ref[0x8000, 0x2000]
+        ]]
+        --self.prg_ref[0x8000, 0x2000], self.prg_ref[0xc000, 0x2000] = self.prg_ref[0xc000, 0x2000], self.prg_ref[0x8000, 0x2000]
     end
 
     if chr_bank_swap ~= self.chr_bank_swap then
         self.chr_bank_swap = chr_bank_swap
         if not self.chr_ram then
-            self.ppu.update(0)
+            self.ppu:update(0)
             self.chr_ref = UTILS.rotate(self.chr_ref, 0x1000)
             self.chr_bank_mapping = UTILS.rotate(self.chr_bank_mapping, 4)
         end
@@ -535,12 +590,12 @@ function MMC3:poke_8001(_addr, data)
 end
 
 function MMC3:poke_a000(_addr, data)
-    self.ppu:nametables(data[0] == 1 and "horizontal" or "vertical")
+    self.ppu:nametables(band(data, 0x1) == 0x1 and "horizontal" or "vertical")
 end
 
 function MMC3:poke_a001(_addr, data)
-    self.wrk_readable = data[7] == 1
-    self.wrk_writable = data[6] == 0 and self.wrk_readable
+    self.wrk_readable = band(data, 0x80) == 0x80
+    self.wrk_writable = band(data, 0x40) == 0x0 and self.wrk_readable
 end
 
 function MMC3:poke_c000(_addr, data)
@@ -565,7 +620,7 @@ function MMC3:poke_e001(_addr, _data)
 end
 
 function MMC3:vsync()
-    self.clock = self.clock > self.cpu.next_frame_clock and self.clock - self.cpu.next_frame_clock or 0
+    self.clock = self.clock > self.cpu:next_frame_clock() and self.clock - self.cpu:next_frame_clock() or 0
 end
 
 function MMC3:a12_signaled(cycle)
