@@ -550,20 +550,7 @@ function MMC3:poke_8000(_addr, data)
 
     if prg_bank_swap ~= self.prg_bank_swap then
         self.prg_bank_swap = prg_bank_swap
-        for i = 1, 0x2000 do
-            local tmp = self.prg_ref[i + 0x8000]
-            self.prg_ref[i + 0x8000] = self.prg_ref[i + 0xc000]
-            self.prg_ref[i + 0xc000] = tmp
-        end
-        --[[
-        for i = 0x8000 + 1, 0x8000 + 0x2000 + 1 do
-            self.prg_ref[i] = self.prg_ref[i - 0x8000 + 0xc000]
-        end
-        for i = 0xc000 + 1, 0xc000 + 0x2000 + 1 do
-            self.chr_ref[i] = self.prg_ref[i - 0xc000 + 0x8000]
-        end
-        ]]
-        --self.prg_ref[0x8000, 0x2000], self.prg_ref[0xc000, 0x2000] = self.prg_ref[0xc000, 0x2000], self.prg_ref[0x8000, 0x2000]
+        UTILS.swapRanges(self.prg_ref, 0x8000, 0xc000)
     end
 
     if chr_bank_swap ~= self.chr_bank_swap then
