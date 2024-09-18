@@ -1127,12 +1127,6 @@ end
 
 local asd = 0
 function CPU:run_once()
-    if self._pc == 0xFF7E then
-        x = x
-    end
-    if self.ppu.chr_mem[6145] == nil then
-        x = x
-    end
     self.opcode = self:fetch(self._pc)
     --[[
     if self.conf.loglevel >= 3 then

@@ -875,10 +875,6 @@ function PPU:fetch_bg_pattern_0()
         return
     end
     self.bg_pattern = self.chr_mem[1 + band(self.io_addr, 0x1fff)]
-    if self.bg_pattern == nil then
-        x = x
-        -- self.chr_mem[6145]
-    end
 end
 
 function PPU:fetch_bg_pattern_1()
