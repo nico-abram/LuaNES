@@ -135,10 +135,10 @@ end
 
 function PPU:reset(mapping)
     self.chr_poke        = function(i, v)
-        self.chr_mem[i] = v
+        self.chr_mem[i + 1] = v
     end
     self.chr_peek        = function(i)
-        return self.chr_mem[i]
+        return self.chr_mem[i + 1]
     end
     self.chr_bg_read     = self.chr_peek
     self.chr_sprite_read = self.chr_peek
@@ -718,7 +718,7 @@ function PPU:poke_2007(_addr, data)
                 end
             end
         elseif self.chr_mem_writable then
-            self.chr_poke(addr + 1, data)
+            self.chr_poke(addr, data)
             --self.chr_mem[addr + 1] = data
         end
     end
@@ -733,7 +733,7 @@ function PPU:peek_2007(_addr)
         band(addr, 0x3f00) ~= 0x3f00 and self.io_buffer or band(self.palette_ram[band(addr, 0x1f) + 1], self.coloring)
     self.io_buffer =
         addr >= 0x2000 and self.nmt_ref[band(rshift(addr, 10), 0x3)][band(addr, 0x3ff)] or
-        self.chr_peek(addr + 1) --self.chr_mem[addr + 1]
+        self.chr_peek(addr) --self.chr_mem[addr + 1]
     return self.io_latch
 end
 
@@ -894,7 +894,7 @@ function PPU:fetch_bg_pattern_0()
     if not self.any_show then
         return
     end
-    self.bg_pattern = self.chr_bg_read(1 + band(self.io_addr, 0x1fff))
+    self.bg_pattern = self.chr_bg_read(band(self.io_addr, 0x1fff))
     --self.bg_pattern = self.chr_mem[1 + band(self.io_addr, 0x1fff)]
 end
 
@@ -902,7 +902,7 @@ function PPU:fetch_bg_pattern_1()
     if not self.any_show then
         return
     end
-    self.bg_pattern = bor(self.bg_pattern, self.chr_bg_read(1 + band(self.io_addr, 0x1fff)) * 0x100)
+    self.bg_pattern = bor(self.bg_pattern, self.chr_bg_read(band(self.io_addr, 0x1fff)) * 0x100)
     --self.bg_pattern = bor(self.bg_pattern, self.chr_mem[1 + band(self.io_addr, 0x1fff)] * 0x100)
 end
 
@@ -1094,8 +1094,8 @@ function PPU:load_extended_sprites()
         repeat
             local addr = self:open_sprite(buffer_idx)
 
-            local pat0 = self.chr_sprite_read(1 + addr)
-            local pat1 = self.chr_sprite_read(1 + bor(addr, 8))
+            local pat0 = self.chr_sprite_read(addr)
+            local pat1 = self.chr_sprite_read(bor(addr, 8))
             --local pat0 = self.chr_mem[1 + addr]
             --local pat1 = self.chr_mem[1 + bor(addr, 8)]
             if pat0 ~= 0 or pat1 ~= 0 then
@@ -1407,17 +1407,17 @@ function PPU:pre_render_scanline()
     self:wait_one_clock()
 
     -- when 335
-    if self.any_show and self.scanline + 1 == self.scanline_counter_target and self.scanline_counter_target ~= 0 then
-        -- Should be 336 according to nesdev but here seems to work better?
-        self.inform_scanline_counter = true
-        self.inform_scanline_counter_clk = true
-    end
     self:fetch_bg_pattern_1()
     self:wait_one_clock()
 
     -- when 336
     self:open_name()
     self:wait_one_clock()
+    if self.any_show and self.scanline + 1 == self.scanline_counter_target and self.scanline_counter_target ~= 0 then
+        -- Should be 336 according to nesdev but here seems to work better?
+        self.inform_scanline_counter = true
+        self.inform_scanline_counter_clk = true
+    end
 
     -- when 337
     if self.any_show then
@@ -1581,7 +1581,7 @@ function PPU:post_render_scanline()
         -- when 261, 269, ..., 317
         if self.any_show then
             if (self.hclk - 261) / 2 < self.sp_buffered then
-                self.io_pattern = self.chr_sprite_read(1 + band(self.io_addr, 0x1fff))
+                self.io_pattern = self.chr_sprite_read(band(self.io_addr, 0x1fff))
                 --self.io_pattern = self.chr_mem[1 + band(self.io_addr, 0x1fff)]
             end
         end
@@ -1596,7 +1596,7 @@ function PPU:post_render_scanline()
             local buffer_idx = (self.hclk - 263) / 2
             if buffer_idx < self.sp_buffered then
                 local pat0 = self.io_pattern
-                local pat1 = self.chr_sprite_read(1 + band(self.io_addr, 0x1fff))
+                local pat1 = self.chr_sprite_read(band(self.io_addr, 0x1fff))
                 --local pat1 = self.chr_mem[1 + band(self.io_addr, 0x1fff)]
                 if pat0 ~= 0 or pat1 ~= 0 then
                     self:load_sprite(pat0, pat1, buffer_idx)
