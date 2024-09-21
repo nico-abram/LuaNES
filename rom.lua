@@ -631,3 +631,351 @@ function MMC3:a12_signaled(cycle)
 end
 
 ROM.MAPPER_DB[0x04] = MMC3
+
+local MMC5 = {}
+MMC5._mt = { __index = MMC5 }
+setmetatable(MMC5, { __index = ROM })
+function MMC5:new(...)
+    local args = { ... }
+    table.insert(args, MMC5._mt)
+    local rom = ROM:new(unpack(args))
+    setmetatable(rom, MMC5._mt)
+    return rom
+end
+
+function MMC5:init()
+    self.chr_mem = {}                                                                                     -- ??K CHR ROM
+    --self.prg_ram = UTILS.fill({}, 0x00, 0x10000)
+    self.prg_ram = UTILS.map(UTILS.fill({}, 0x00, 8), function() return UTILS.fill({}, 0x00, 0x2000) end) -- 64K PRG RAM
+
+    -- Reorganize 8k chr ROM banks into 1kb banks
+    do
+        local initial_chr_banks = self.chr_banks
+        self.chr_1k_banks = {}
+        local chr_rom_bank_idx = 0
+        local chr_rom_idx = (1024) + 1
+        for i = 1, #initial_chr_banks do
+            local old_chr_bank = initial_chr_banks[i]
+            for j = 1, #old_chr_bank do
+                if chr_rom_idx == ((1024) + 1) then
+                    chr_rom_idx = 1
+                    chr_rom_bank_idx = chr_rom_bank_idx + 1
+                    self.chr_1k_banks[chr_rom_bank_idx] = {}
+                end
+                self.chr_1k_banks[chr_rom_bank_idx][chr_rom_idx - 1] = old_chr_bank[j]
+                chr_rom_idx                                          = chr_rom_idx + 1
+            end
+        end
+    end
+    -- Reorganize 1-indexed 16k prg ROM banks into 0-indexed 8kb banks
+    do
+        local initial_16k_prg_rom_banks = self.prg_banks
+        self.prg_banks = {}
+        local prg_rom_bank_idx = 0
+        local prg_rom_idx = (8 * 1024) + 1
+        for i = 1, #initial_16k_prg_rom_banks do
+            local old_prg_bank = initial_16k_prg_rom_banks[i]
+            for j = 1, #old_prg_bank do
+                if prg_rom_idx == ((8 * 1024) + 1) then
+                    prg_rom_idx = 1
+                    prg_rom_bank_idx = prg_rom_bank_idx + 1
+                    self.prg_banks[prg_rom_bank_idx] = {}
+                end
+                self.prg_banks[prg_rom_bank_idx][prg_rom_idx - 1] = old_prg_bank[j]
+                prg_rom_idx                                       = prg_rom_idx + 1
+            end
+        end
+    end
+
+    self.chr_mode                   = 0x00
+    self.chr_sprite_page_selectors  = { 0x7F, 0x7F, 0x7F, 0x7F, 0x7F, 0x7F, 0x7F, 0x7F } -- chr page "A"
+    self.chr_bg_page_selectors      = { 0x7F, 0x7F, 0x7F, 0x7F }                         -- chr page "B"
+    self.chr_selector_high_bits     = 0x00                                               -- top 2 bits of the 10 bit selector
+
+    -- "The Koei games never write to this register, apparently relying on the MMC5 defaulting to mode 3 at power on. "
+    -- -nesdev wiki
+    self.prg_mode                   = 0x03
+    self.prg_selectors              = { 0x00, 0x00, 0x00, 0x00, #(self.prg_banks) - 1 }
+    local last_prg_bank             = self.prg_banks[#(self.prg_banks)]
+    self.prg_ref_8k_banks           = { 0x00, last_prg_bank, last_prg_bank, last_prg_bank, last_prg_bank }
+
+    self.ram_protect1               = 0x00
+    self.ram_protect2               = 0x00
+
+    self.internal_ram_extended_mode = 0x00 -- starting value??
+
+    self.ppu_nametable_mappings_reg = 0x00
+    self.ppu_nametable_mappings     = { 0x00, 0x00, 0x00, 0x00 } -- starting value??
+    self.nametable_fill_mode_tile   = 0x00
+    self.nametable_fill_mode_color  = 0x00
+
+    self.multiplicand               = 0xFF
+    self.multiplier                 = 0xFF
+
+    self.scanline_pending_bit       = 0x00
+    self.in_frame_bit               = 0x00
+    self.irq_enable                 = false
+    self.scanline_counter           = 0x00
+
+    local b                         = self.chr_1k_banks[1]
+    self.chr_ref_sp_1k_chr_banks    = { b, b, b, b, b, b, b, b }
+    self.chr_ref_bg_1k_chr_banks    = { b, b, b, b }
+    self.chr_ref_last_1k_chr_banks  = self.chr_ref_sp_1k_chr_banks
+
+    self.chr_ref                    = setmetatable({},
+        { __index = bind(self.chr_read, self), __newindex = bind(self.chr_write, self) })
+end
+
+function MMC5:get_prg_8k_bank(selector)
+    local is_ram = band(selector, 0x80) == 0
+    local ram_mask = band(selector, 0x07)
+    local rom_mask = band(selector, 0x7F)
+    return is_ram and self.prg_ram[(ram_mask % #(self.prg_ram)) + 1] or
+        self.prg_banks[(rom_mask % #(self.prg_banks)) + 1]
+end
+
+function MMC5:update_prg()
+    self.prg_ref_8k_banks[1] = self:get_prg_8k_bank(band(self.prg_selectors[1], 0x7))
+
+    local mode = band(self.prg_mode, 0x3)
+    if mode == 0x00 then
+        local masked = bor(band(self.prg_selectors[5], 0x7C), 0x80)
+        self.prg_ref_8k_banks[2] = self:get_prg_8k_bank(masked)
+        self.prg_ref_8k_banks[3] = self:get_prg_8k_bank(masked + 1)
+        self.prg_ref_8k_banks[4] = self:get_prg_8k_bank(masked + 2)
+        self.prg_ref_8k_banks[5] = self:get_prg_8k_bank(masked + 3)
+    elseif mode == 0x01 then
+        local masked = band(self.prg_selectors[3], 0xFE)
+        self.prg_ref_8k_banks[2] = self:get_prg_8k_bank(masked)
+        self.prg_ref_8k_banks[3] = self:get_prg_8k_bank(masked + 1)
+        local masked2 = bor(band(self.prg_selectors[5], 0x7E), 0x80)
+        self.prg_ref_8k_banks[4] = self:get_prg_8k_bank(masked2)
+        self.prg_ref_8k_banks[5] = self:get_prg_8k_bank(masked2 + 1)
+    elseif mode == 0x02 then
+        local masked = band(self.prg_selectors[3], 0xFE)
+        self.prg_ref_8k_banks[2] = self:get_prg_8k_bank(masked)
+        self.prg_ref_8k_banks[3] = self:get_prg_8k_bank(masked + 1)
+        self.prg_ref_8k_banks[4] = self:get_prg_8k_bank(self.prg_selectors[4])
+        self.prg_ref_8k_banks[5] = self:get_prg_8k_bank(bor(self.prg_selectors[5], 0x80))
+    elseif mode == 0x03 then
+        self.prg_ref_8k_banks[2] = self:get_prg_8k_bank(self.prg_selectors[2])
+        self.prg_ref_8k_banks[3] = self:get_prg_8k_bank(self.prg_selectors[3])
+        self.prg_ref_8k_banks[4] = self:get_prg_8k_bank(self.prg_selectors[4])
+        self.prg_ref_8k_banks[5] = self:get_prg_8k_bank(bor(self.prg_selectors[5], 0x80))
+    else
+        assert(false)
+    end
+end
+
+function MMC5:add_register(addr, field, on_set)
+    local setter = on_set and function(_i, v)
+        self[field] = v
+        on_set(v)
+    end or function(_i, v) self[field] = v end
+    self.cpu:add_mappings(addr, function() return self[field] end, setter)
+end
+
+function MMC5:reset()
+    self:add_register(0x5101, 'chr_mode', bind(self.update_chr_1k_banks, self))
+
+    do
+        local chr_sp_pg_idxs = self.chr_sprite_page_selectors
+        local chr_bg_pg_idxs = self.chr_bg_page_selectors
+        local chr_sp_ref = self.chr_ref_sp_1k_chr_banks
+        local chr_bg_ref = self.chr_ref_bg_1k_chr_banks
+
+        self.cpu:add_mappings(range(0x5120, 0x5127), function(i)
+                return chr_sp_pg_idxs[i - 0x511F]
+            end,
+            function(i, v)
+                self.chr_ref_last_1k_chr_banks = chr_sp_ref
+                chr_sp_pg_idxs[i - 0x511F] = v + lshift(band(self.chr_selector_high_bits, 0x3), 8)
+                self:update_chr_1k_banks()
+            end)
+        self.cpu:add_mappings(range(0x5128, 0x512B), function(i, v)
+                return chr_bg_pg_idxs[i - 0x5127]
+            end,
+            function(i, v)
+                self.chr_ref_last_1k_chr_banks = chr_bg_ref
+                chr_bg_pg_idxs[i - 0x5127] = v + lshift(band(self.chr_selector_high_bits, 0x3), 8)
+                self:update_chr_1k_banks()
+            end)
+    end
+    self:add_register(0x5130, 'chr_selector_high_bits')
+
+    self:add_register(0x5100, 'prg_mode', bind(self.update_prg, self))
+    do
+        local prg_selectors = self.prg_selectors
+        self.cpu:add_mappings(range(0x5113, 0x5117), function(i)
+                return prg_selectors[i - 0x5112]
+            end,
+            function(i, v)
+                prg_selectors[i - 0x5112] = v
+                self:update_prg()
+            end)
+    end
+    local map_prg_bank = function(bank_num, offset)
+        self.cpu:add_mappings(range(offset, offset + 0x1FFF), function(i)
+                return self.prg_ref_8k_banks[bank_num][band(i, 0x1FFF)]
+            end,
+            function(i, v)
+                self.prg_ref_8k_banks[bank_num][band(i, 0x1FFF)] = v
+            end)
+    end
+    map_prg_bank(1, 0x6000)
+    map_prg_bank(2, 0x8000)
+    map_prg_bank(3, 0xA000)
+    map_prg_bank(4, 0xC000)
+    map_prg_bank(5, 0xE000)
+
+    self:add_register(0x5102, 'ram_protect1')
+    self:add_register(0x5103, 'ram_protect2')
+
+    do
+        local ppu_nt = self.ppu_nametable_mappings
+        self:add_register(0x5103, 'ppu_nametable_mappings_reg', function(reg)
+            self.ppu_nametable_mappings[1] = band(reg, 0x3)
+            self.ppu_nametable_mappings[2] = band(rshift(reg, 2), 0x3)
+            self.ppu_nametable_mappings[3] = band(rshift(reg, 4), 0x3)
+            self.ppu_nametable_mappings[4] = band(rshift(reg, 6), 0x3)
+        end)
+    end
+
+    self:add_register(0x5106, 'nametable_fill_mode_tile')
+    self:add_register(0x5107, 'nametable_fill_mode_color')
+
+    self.cpu:add_mappings(0x5205, function(i, v)
+            return band(self.multiplicand * self.multiplier, 0xFF)
+        end,
+        function(i, v)
+            self.multiplicand = v
+        end)
+    self.cpu:add_mappings(0x5206, function(i, v)
+            return band(rshift(self.multiplicand * self.multiplier, 8), 0xFF)
+        end,
+        function(i, v)
+            self.multiplier = v
+        end)
+
+    self.cpu.ppu_sync = true
+    local scanline_counter_callback = bind(self.scanline_counter_callback, self)
+    self:add_register(0x5203, 'scanline_counter',
+        function(v)
+            self.ppu:scanline_counter_listener(v, scanline_counter_callback)
+        end)
+    -- TODO: In Frame bit
+    self.cpu:add_mappings(0x5204, function(i, v)
+            local ret = bor(self.in_frame_bit, self.scanline_pending_bit)
+            self.scanline_pending_bit = 0x00
+            self.cpu:clear_irq(CPU.IRQ_EXT)
+            return ret
+        end,
+        function(i, v)
+            self.irq_enable = band(v, 0x80) ~= 0x00
+        end)
+
+    -- TODO: ExAttribute mode
+    self.ppu.chr_peek = function(idx)
+        local addr_1kpage_idx = rshift(idx, 10) -- / 0x400
+        return self.chr_ref_last_1k_chr_banks[addr_1kpage_idx + 1][band(idx, 0x3FF)]
+    end
+    self.ppu.chr_poke = function(idx, val)
+        local addr_1kpage_idx = rshift(idx, 10) -- / 0x400
+        self.chr_ref_last_1k_chr_banks[addr_1kpage_idx + 1][band(idx, 0x3FF)] = val
+    end
+    self.ppu.chr_bg_read = function(idx)
+        local addr_1kpage_idx = band(rshift(idx, 10), 0x3) -- / 0x400
+        return self.chr_ref_bg_1k_chr_banks[addr_1kpage_idx + 1][band(idx, 0x3FF)]
+    end
+    self.ppu.chr_sprite_read = function(idx)
+        local addr_1kpage_idx = rshift(idx, 10) -- / 0x400
+        return self.chr_ref_sp_1k_chr_banks[addr_1kpage_idx + 1][band(idx, 0x3FF)]
+    end
+end
+
+function MMC5:update_chr_1k_banks()
+    local sp_selectrs = self.chr_sprite_page_selectors
+    local bg_selectrs = self.chr_bg_page_selectors
+    local bg_ref = self.chr_ref_bg_1k_chr_banks
+    local sp_ref = self.chr_ref_sp_1k_chr_banks
+    local n_chr_banks = #(self.chr_1k_banks)
+
+    if self.chr_mode == 0x03 then
+        sp_ref[1] = self.chr_1k_banks[(sp_selectrs[1] % n_chr_banks) + 1]
+        sp_ref[2] = self.chr_1k_banks[(sp_selectrs[2] % n_chr_banks) + 1]
+        sp_ref[3] = self.chr_1k_banks[(sp_selectrs[3] % n_chr_banks) + 1]
+        sp_ref[4] = self.chr_1k_banks[(sp_selectrs[4] % n_chr_banks) + 1]
+        sp_ref[5] = self.chr_1k_banks[(sp_selectrs[5] % n_chr_banks) + 1]
+        sp_ref[6] = self.chr_1k_banks[(sp_selectrs[6] % n_chr_banks) + 1]
+        sp_ref[7] = self.chr_1k_banks[(sp_selectrs[7] % n_chr_banks) + 1]
+        sp_ref[8] = self.chr_1k_banks[(sp_selectrs[8] % n_chr_banks) + 1]
+
+        bg_ref[1] = self.chr_1k_banks[(bg_selectrs[1] % n_chr_banks) + 1]
+        bg_ref[2] = self.chr_1k_banks[(bg_selectrs[2] % n_chr_banks) + 1]
+        bg_ref[3] = self.chr_1k_banks[(bg_selectrs[3] % n_chr_banks) + 1]
+        bg_ref[4] = self.chr_1k_banks[(bg_selectrs[4] % n_chr_banks) + 1]
+    elseif self.chr_mode == 0x02 then
+        local bank_idx_sp = bg_selectrs[2] * 2
+        sp_ref[1] = self.chr_1k_banks[((bank_idx_sp) % n_chr_banks) + 1]
+        sp_ref[2] = self.chr_1k_banks[((bank_idx_sp + 1) % n_chr_banks) + 1]
+        local bank_idx_sp2 = bg_selectrs[4] * 2
+        sp_ref[3] = self.chr_1k_banks[((bank_idx_sp2) % n_chr_banks) + 1]
+        sp_ref[4] = self.chr_1k_banks[((bank_idx_sp2 + 1) % n_chr_banks) + 1]
+        local bank_idx_sp3 = bg_selectrs[6] * 2
+        sp_ref[5] = self.chr_1k_banks[((bank_idx_sp3) % n_chr_banks) + 1]
+        sp_ref[6] = self.chr_1k_banks[((bank_idx_sp3 + 1) % n_chr_banks) + 1]
+        local bank_idx_sp4 = bg_selectrs[8] * 2
+        sp_ref[7] = self.chr_1k_banks[((bank_idx_sp4) % n_chr_banks) + 1]
+        sp_ref[8] = self.chr_1k_banks[((bank_idx_sp4 + 1) % n_chr_banks) + 1]
+
+        local bank_idx_sp = bg_selectrs[2] * 2
+        bg_ref[1] = self.chr_1k_banks[((bank_idx_sp) % n_chr_banks) + 1]
+        bg_ref[2] = self.chr_1k_banks[((bank_idx_sp + 1) % n_chr_banks) + 1]
+        local bank_idx_sp2 = bg_selectrs[4] * 2
+        bg_ref[3] = self.chr_1k_banks[((bank_idx_sp2) % n_chr_banks) + 1]
+        bg_ref[4] = self.chr_1k_banks[((bank_idx_sp2 + 1) % n_chr_banks) + 1]
+    elseif self.chr_mode == 0x01 then
+        local bank_idx = sp_selectrs[4] * 4
+        sp_ref[1] = self.chr_1k_banks[((bank_idx) % n_chr_banks) + 1]
+        sp_ref[2] = self.chr_1k_banks[((bank_idx + 1) % n_chr_banks) + 1]
+        sp_ref[3] = self.chr_1k_banks[((bank_idx + 2) % n_chr_banks) + 1]
+        sp_ref[4] = self.chr_1k_banks[((bank_idx + 3) % n_chr_banks) + 1]
+        local bank_idx2 = sp_selectrs[8] * 4
+        sp_ref[5] = self.chr_1k_banks[((bank_idx2) % n_chr_banks) + 1]
+        sp_ref[6] = self.chr_1k_banks[((bank_idx2 + 1) % n_chr_banks) + 1]
+        sp_ref[7] = self.chr_1k_banks[((bank_idx2 + 2) % n_chr_banks) + 1]
+        sp_ref[8] = self.chr_1k_banks[((bank_idx2 + 3) % n_chr_banks) + 1]
+
+        local bank_idx_sp = bg_selectrs[4] * 4
+        bg_ref[1] = self.chr_1k_banks[((bank_idx_sp) % n_chr_banks) + 1]
+        bg_ref[2] = self.chr_1k_banks[((bank_idx_sp + 1) % n_chr_banks) + 1]
+        bg_ref[3] = self.chr_1k_banks[((bank_idx_sp + 2) % n_chr_banks) + 1]
+        bg_ref[4] = self.chr_1k_banks[((bank_idx_sp + 3) % n_chr_banks) + 1]
+    elseif self.chr_mode == 0x00 then
+        local bank_idx = sp_selectrs[8] * 8
+        sp_ref[1] = self.chr_1k_banks[((bank_idx) % n_chr_banks) + 1]
+        sp_ref[2] = self.chr_1k_banks[((bank_idx + 1) % n_chr_banks) + 1]
+        sp_ref[3] = self.chr_1k_banks[((bank_idx + 2) % n_chr_banks) + 1]
+        sp_ref[4] = self.chr_1k_banks[((bank_idx + 3) % n_chr_banks) + 1]
+        sp_ref[5] = self.chr_1k_banks[((bank_idx + 4) % n_chr_banks) + 1]
+        sp_ref[6] = self.chr_1k_banks[((bank_idx + 5) % n_chr_banks) + 1]
+        sp_ref[7] = self.chr_1k_banks[((bank_idx + 6) % n_chr_banks) + 1]
+        sp_ref[8] = self.chr_1k_banks[((bank_idx + 7) % n_chr_banks) + 1]
+
+        local bank_idx_sp = bg_selectrs[4] * 8
+        bg_ref[1] = self.chr_1k_banks[((bank_idx_sp) % n_chr_banks) + 1]
+        bg_ref[2] = self.chr_1k_banks[((bank_idx_sp + 1) % n_chr_banks) + 1]
+        bg_ref[3] = self.chr_1k_banks[((bank_idx_sp + 2) % n_chr_banks) + 1]
+        bg_ref[4] = self.chr_1k_banks[((bank_idx_sp + 3) % n_chr_banks) + 1]
+    end
+end
+
+function MMC5:scanline_counter_callback()
+    if self.irq_enable then
+        -- TODO: Clock this better?
+        local clk = self.cpu:current_clock();
+        (self.cpu):do_irq(CPU.IRQ_EXT, clk)
+    end
+end
+
+ROM.MAPPER_DB[0x05] = MMC5

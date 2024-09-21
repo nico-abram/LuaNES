@@ -117,6 +117,7 @@ end
 
 -- read an addr (8 bit)
 function CPU:fetch(addr)
+    --UTILS.print(string.format("%04X", addr))
     return self._fetch[addr](addr)
 end
 
@@ -268,7 +269,8 @@ end
 
 function CPU:clear_irq(line)
     local old_irq_flags = band(self.irq_flags, bor(CPU.IRQ_FRAME, CPU.IRQ_DMC))
-    self.irq_flags = band(bxor(self.irq_flags, bxor(line, bor(bor(CPU.IRQ_EXT, CPU.IRQ_FRAME), CPU.IRQ_DMC))))
+    -- self.irq_flags = band(bxor(self.irq_flags, bxor(line, bor(bor(CPU.IRQ_EXT, CPU.IRQ_FRAME), CPU.IRQ_DMC))))
+    self.irq_flags = band(self.irq_flags, bxor(line, bor(bor(CPU.IRQ_EXT, CPU.IRQ_FRAME), CPU.IRQ_DMC)))
     if self.irq_flags == 0 then
         self.clk_irq = FOREVER_CLOCK
     end
@@ -1031,9 +1033,9 @@ function CPU:printState(doFetch)
     if self.ppu then
         ppuclk = self.ppu.hclk
     end
-    print(
+    UTILS.print(
         string.format(
-            "PC:%04X OP:%02X %02X %02X %s %04X %02X \t A:%02X X:%02X Y:%02X P:%02X SP:%02X CYC:%3d %s",
+            "PC:%04X OP:%02X %02X %02X %s %04X %02X \t A:%02X X:%02X Y:%02X P:%02X SP:%02X CYC:%3d %s %d stk:[%04X,%04X,%04X,%04X,%04X,%04X]",
             self._pc,
             self.opcode or 0,
             doFetch and self:fetch(self._pc + 1) or -1,
@@ -1048,7 +1050,13 @@ function CPU:printState(doFetch)
             self._sp,
             self.clk / 4 % 341,
             tostring(ppuclk),
-            self.clk
+            self.clk,
+            self.ram[0x100 + self._sp],
+            self.ram[0x100 + self._sp + 1],
+            self.ram[0x100 + self._sp + 2],
+            self.ram[0x100 + self._sp + 3],
+            self.ram[0x100 + self._sp + 4],
+            self.ram[0x100 + self._sp + 5]
         )
     )
     --]]
@@ -1127,7 +1135,15 @@ end
 
 local asd = 0
 function CPU:run_once()
+    --if self._pc == 0x875E or self._pc == (0x875E + 1) or self._pc == (0x875E + 2) or self._pc == (0x875E - 1) or self._pc == (0x875E + 3) then
+    --[[
+    local pccheck = 0xE144
+    if self._pc == pccheck or self._pc == (pccheck + 1) or self._pc == (pccheck + 2) or self._pc == (pccheck - 1) or self._pc == (pccheck + 3) then
+        asd = asd
+    end
+    --]]
     self.opcode = self:fetch(self._pc)
+    --self:printState(true)
     --[[
     if self.conf.loglevel >= 3 then
         self:printState(true)
