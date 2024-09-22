@@ -909,7 +909,7 @@ function Noise:sample()
       return self.bits % 2 == 0 and self.envelope.output * 2 or 0
     end
 
-    local sum = self.bits % 2 == 0 and self.timer or 0
+    local sum = self.bits % 2 == 0 and (self.timer + self.rate) or 0
     repeat
       self.bits = self.shifter[self.bits]
       if self.bits % 2 == 0 then

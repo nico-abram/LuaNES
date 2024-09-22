@@ -2,6 +2,7 @@
 NES emulator in lua+love2d based/inspired on [optcarrot](https://github.com/mame/optcarrot). Note that the emulator is written in pure lua(JIT) and it should be possible to write a "front end" for it in something other than love2d (Like games that embed lua and let you play audio/video from memory).
 
 Here's what it looks like: https://streamable.com/x7f5u
+Here's Castlevania 3 (A game which uses the [MMC5](https://www.nesdev.org/wiki/MMC5) mapper): https://streamable.com/2ucq3l
 
 LuaNES running inside Garry's Mod: https://share.epic-domain.com/2019-06-29_18-23-19975b9f0bca56cbe9c.webm (Courtesy of [ZehMatt](https://github.com/nico-abram/LuaNES/pull/1#issuecomment-541408792))
 
@@ -45,7 +46,7 @@ Wikipedia pages might also be helpful.
 
 # Progress
 
-It should be fairly functional. I've managed to run Super Mario, Tetris and a number of "modern" open source ROMs. Audio has many issues, but is there. Video is almost always correct. The CPU emulation, as far as I've been able to tell, is completely correct. The most important things are probably fixing audio generation (The APU), adding the second controller, working on full savestates and normal saves, and maybe improving the love2d "frontend" (i.e a rom file selector instead of having to give it through the command line, and adding configuration for controller buttons).
+It should be fairly functional. I've managed to run Super Mario, Tetris, Super Mario Bros 2, Castlevania 2 and a number of "modern" open source ROMs. Audio has many issues, but is there. Video output seems fine in the games I've tested. The CPU emulation is mostly correct. The most important things are probably fixing audio generation (The APU), adding the second controller, working on full savestates and normal saves, and maybe improving the love2d "frontend" (i.e a rom file selector instead of having to give it through the command line, adding configuration for controller buttons, and potentially adding debugging features).
 
 # Controls
 
