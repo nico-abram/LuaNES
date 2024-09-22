@@ -91,7 +91,11 @@ local keyButtons = {
     ["i"] = Pad.SELECT,
     ["return"] = Pad.START
 }
+printTheThing = false
 function love.keypressed(key)
+    if key == "t" then
+        printThething = true
+    end
     for k, v in pairs(keyButtons) do
         if k == key then
             keyEvents[#keyEvents + 1] = { "keydown", v }
@@ -100,6 +104,9 @@ function love.keypressed(key)
 end
 
 function love.keyreleased(key)
+    if key == "t" then
+        printThething = false
+    end
     for k, v in pairs(keyButtons) do
         if k == key then
             keyEvents[#keyEvents + 1] = { "keyup", v }
@@ -184,7 +191,7 @@ local function drawAPUState()
         10,
         200
     )
-    love.graphics.print(string.format("MMC5: %04X", Nes.rom.ppu_nametable_mappings_reg), 10, 220)
+    --love.graphics.print(string.format("MMC5: %04X", Nes.rom.ppu_nametable_mappings_reg), 10, 220)
 end
 local function draw()
     drawScreen()

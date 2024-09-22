@@ -329,6 +329,7 @@ function PPU:update_output_color()
 end
 
 function PPU:setup_lut()
+    --UTILS.print("setup_lut start")
     self.lut_update = {}
 
     self.name_lut =
@@ -354,6 +355,7 @@ function PPU:setup_lut()
             end
         )
 
+    --UTILS.print("setup_lut mid")
     local entries = {}
     self.attr_lut =
         map(
@@ -386,6 +388,7 @@ function PPU:setup_lut()
                 return entries[key]
             end
         )
+    --UTILS.print("setup_lut end")
     return entries
 end
 

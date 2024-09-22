@@ -833,19 +833,24 @@ function MMC5:reset()
 
     do
         local ppu_nt = self.ppu_nametable_mappings
-        self:add_register(0x5103, 'ppu_nametable_mappings_reg', function(reg)
+        self:add_register(0x5105, 'ppu_nametable_mappings_reg', function(reg)
             self.ppu_nametable_mappings[1] = band(reg, 0x3)
             self.ppu_nametable_mappings[2] = band(rshift(reg, 2), 0x3)
             self.ppu_nametable_mappings[3] = band(rshift(reg, 4), 0x3)
             self.ppu_nametable_mappings[4] = band(rshift(reg, 6), 0x3)
+            UTILS.print(string.format("ppu_nametable_mappings_reg %04X %04X %04X %04X", self.ppu_nametable_mappings[1],
+                self.ppu_nametable_mappings[2], self.ppu_nametable_mappings[3], self.ppu_nametable_mappings[4]))
             -- TODO: Unimplemented nametable mappings 2 and 3 (Extended RAM and fill-mode)
-            assert(self.ppu_nametable_mappings[1] <= 0x1)
-            assert(self.ppu_nametable_mappings[2] <= 0x1)
-            assert(self.ppu_nametable_mappings[3] <= 0x1)
-            assert(self.ppu_nametable_mappings[4] <= 0x1)
-            UTILS.print("self.ppu_nametable_mappings")
-            UTILS.print(self.ppu_nametable_mappings)
-            self.ppu:nametables(self.ppu_nametable_mapping)
+            --assert(self.ppu_nametable_mappings[1] <= 0x1)
+            --assert(self.ppu_nametable_mappings[2] <= 0x1)
+            --assert(self.ppu_nametable_mappings[3] <= 0x1)
+            --assert(self.ppu_nametable_mappings[4] <= 0x1)
+            -- HACK: ignore NT 3 and 4
+            self.ppu_nametable_mappings[1] = band(reg, 0x1)
+            self.ppu_nametable_mappings[2] = band(rshift(reg, 2), 0x1)
+            self.ppu_nametable_mappings[3] = band(rshift(reg, 4), 0x1)
+            self.ppu_nametable_mappings[4] = band(rshift(reg, 6), 0x1)
+            self.ppu:nametables(self.ppu_nametable_mappings)
         end)
     end
 

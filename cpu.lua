@@ -189,6 +189,7 @@ function CPU:new(conf)
     cpu.conf = conf or { loglevel = 0, pc = nil }
     cpu.conf.debug = UTILS.print
     cpu.ram = fill({}, UNDEFINED, RAM_SIZE)
+    cpu.ram[0] = UNDEFINED
     cpu._store = fill({}, UNDEFINED, CPU.MAINMEM_SIZE)
     cpu._fetch = fill({}, UNDEFINED, CPU.MAINMEM_SIZE)
     cpu.peeks = {}
@@ -1035,7 +1036,7 @@ function CPU:printState(doFetch)
     end
     UTILS.print(
         string.format(
-            "PC:%04X OP:%02X %02X %02X %s %04X %02X \t A:%02X X:%02X Y:%02X P:%02X SP:%02X CYC:%3d %s %d stk:[%04X,%04X,%04X,%04X,%04X,%04X]",
+            "PC:%04X OP:%02X %02X %02X %s %04X %02X \t A:%02X X:%02X Y:%02X P:%02X SP:%02X CYC:%3d",
             self._pc,
             self.opcode or 0,
             doFetch and self:fetch(self._pc + 1) or -1,
@@ -1048,15 +1049,8 @@ function CPU:printState(doFetch)
             self._y,
             self:flags_pack(),
             self._sp,
-            self.clk / 4 % 341,
-            tostring(ppuclk),
-            self.clk,
-            self.ram[0x100 + self._sp],
-            self.ram[0x100 + self._sp + 1],
-            self.ram[0x100 + self._sp + 2],
-            self.ram[0x100 + self._sp + 3],
-            self.ram[0x100 + self._sp + 4],
-            self.ram[0x100 + self._sp + 5]
+            self.clk / 4 % 341
+        --,tostring(ppuclk)
         )
     )
     --]]
@@ -1144,6 +1138,11 @@ function CPU:run_once()
     --]]
     self.opcode = self:fetch(self._pc)
     --self:printState(true)
+    --[[
+    if printThething then
+        self:printState(true)
+    end
+    ]]
     --[[
     if self.conf.loglevel >= 3 then
         self:printState(true)
