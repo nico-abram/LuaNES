@@ -16,10 +16,10 @@ local map, rotatePositiveIdx, nthBitIsSet, nthBitIsSetInt =
 
 NES = {}
 local NES = NES
-NES._mt = {__index = NES}
+NES._mt = { __index = NES }
 
 function NES:reset()
-    self.audio, self.video, self.input = {spec = {}}, {palette = {}}, {}
+    self.audio, self.video, self.input = { spec = {} }, { palette = {} }, {}
 
     local cpu = self.cpu
     cpu:reset()
@@ -30,6 +30,7 @@ function NES:reset()
     cpu:boot()
     self.rom:load_battery()
 end
+
 function NES:run_once()
     self.cpu.ppu:setup_frame()
     self.cpu:run()
@@ -44,6 +45,7 @@ function NES:run_once()
 
     self.frame = self.frame + 1
 end
+
 function NES:run(counter)
     self:reset()
     if not counter then
@@ -57,9 +59,10 @@ function NES:run(counter)
         acum = acum + 1
     end
 end
+
 function NES:new(opts)
     opts = opts or {}
-    local conf = {romfile = opts.file, pc = opts.pc or nil, loglevel = opts.loglevel or 0}
+    local conf = { romfile = opts.file, pc = opts.pc or nil, loglevel = opts.loglevel or 0 }
     local nes = {}
     local palette = opts.palette or PALETTE:defacto_palette()
     setmetatable(nes, NES._mt)
