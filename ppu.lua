@@ -136,6 +136,8 @@ function PPU:scanline_counter_listener(scanline_counter_target, callback)
 end
 
 function PPU:reset(mapping)
+    self.nt_cache        = { nmt_ref = {} }
+
     self.chr_poke        = function(i, v)
         self.chr_mem[i + 1] = v
     end
@@ -330,12 +332,14 @@ end
 
 function PPU:setup_lut()
     --UTILS.print("setup_lut start")
-    self.lut_update = {}
+    if self.lut_update == nil then
+        self.lut_update = {}
+    end
 
     self.name_lut =
         map(
             range(0, 0xffff),
-            function(i)
+            function(i, name_lut)
                 local nmt_bank = self.nmt_ref[band(rshift(i, 10), 3)]
                 local nmt_idx = band(i, 0x03ff)
                 local fixed = bor(band(rshift(i, 12), 7), lshift(nthBitIsSetInt(i, 15), 12))
@@ -350,7 +354,7 @@ function PPU:setup_lut()
                     upd[1] = {}
                 end
                 upd = upd[1]
-                upd[#upd + 1] = { i, fixed }
+                upd[#upd + 1] = { i, fixed, name_lut }
                 return bor(lshift(nmt_bank[nmt_idx], 4), fixed)
             end
         )
@@ -420,10 +424,55 @@ function PPU:nametables(mode)
     then
         return
     end
+    if
+        self.nt_cache.lut_update ~= nil and
+        UTILS.all(
+            range(0, 3),
+            function(i)
+                return self.nt_cache.nmt_ref[i] == self.nmt_mem[idxs[i + 1]]
+            end
+        )
+    then
+        self.nt_cache.nmt_ref[0] = self.nmt_ref[0]
+        self.nt_cache.nmt_ref[1] = self.nmt_ref[1]
+        self.nt_cache.nmt_ref[2] = self.nmt_ref[2]
+        self.nt_cache.nmt_ref[3] = self.nmt_ref[3]
+
+        local lut_update = self.nt_cache.lut_update
+        local attr_lut = self.nt_cache.attr_lut
+        local name_lut = self.nt_cache.name_lut
+        self.nt_cache.lut_update = self.lut_update
+        self.nt_cache.attr_lut = self.attr_lut
+        self.nt_cache.name_lut = self.name_lut
+
+        self.nmt_ref[0] = self.nmt_mem[idxs[1]]
+        self.nmt_ref[1] = self.nmt_mem[idxs[2]]
+        self.nmt_ref[2] = self.nmt_mem[idxs[3]]
+        self.nmt_ref[3] = self.nmt_mem[idxs[4]]
+        self.lut_update = lut_update
+        self.attr_lut = attr_lut
+        self.name_lut = name_lut
+
+        return
+    end
+    if self.nt_cache.lut_update == nil then
+        self.nt_cache.nmt_ref[0] = self.nmt_ref[0]
+        self.nt_cache.nmt_ref[1] = self.nmt_ref[1]
+        self.nt_cache.nmt_ref[2] = self.nmt_ref[2]
+        self.nt_cache.nmt_ref[3] = self.nmt_ref[3]
+        self.nt_cache.lut_update = self.lut_update
+        self.nt_cache.attr_lut = self.attr_lut
+        self.nt_cache.name_lut = self.name_lut
+    else
+        self.lut_update = nil
+        self.nt_cache.lut_update = nil
+    end
+
     self.nmt_ref[0] = self.nmt_mem[idxs[1]]
     self.nmt_ref[1] = self.nmt_mem[idxs[2]]
     self.nmt_ref[2] = self.nmt_mem[idxs[3]]
     self.nmt_ref[3] = self.nmt_mem[idxs[4]]
+
     self:setup_lut()
 end
 
@@ -712,7 +761,8 @@ function PPU:poke_2007(_addr, data)
                 if name_lut_update then
                     for i = 1, #name_lut_update do
                         local t = name_lut_update[i]
-                        self.name_lut[t[1]] = bor(lshift(data, 4), t[2])
+                        local name_lut_to_update = t[3] -- self.name_lut
+                        name_lut_to_update[t[1]] = bor(lshift(data, 4), t[2])
                     end
                 end
                 if attr_lut_update then
@@ -880,7 +930,7 @@ function PPU:open_attr()
     if not self.any_show then
         return
     end
-    local t = self.attr_lut[bit.bor(self.scroll_addr_0_4, self.scroll_addr_5_14)]
+    local t = self.attr_lut[bor(self.scroll_addr_0_4, self.scroll_addr_5_14)]
     self.io_addr, self.bg_pattern_lut_fetched = t[1], t[2]
     return self:update_address_line()
 end
