@@ -108,6 +108,8 @@ function PPU:initialize(conf, cpu, palette)
     self.scanline_counter_target = 0
     self.inform_scanline_counter = false
     self.scanline_counter_callback = function() end
+    self.on_scanline_240 = function() end
+    self.on_scanline_0 = function() end
 
     self.nmt_mem = { [0] = UTILS.fill({}, 0xff, 0x400, 1, -1), [1] = UTILS.fill({}, 0xff, 0x400, 1, -1) }
     --[  [0xff] * 0x400, [0xff] * 0x400]
@@ -404,7 +406,7 @@ PPU.NMT_TABLE = {
 }
 function PPU:nametables(mode)
     self:update(RP2C02_CC)
-    local idxs = PPU.NMT_TABLE[mode]
+    local idxs = PPU.NMT_TABLE[mode] or mode
     if
         UTILS.all(
             range(0, 3),
@@ -1411,13 +1413,12 @@ function PPU:pre_render_scanline()
     self:wait_one_clock()
 
     -- when 336
-    self:open_name()
-    self:wait_one_clock()
     if self.any_show and self.scanline + 1 == self.scanline_counter_target and self.scanline_counter_target ~= 0 then
-        -- Should be 336 according to nesdev but here seems to work better?
         self.inform_scanline_counter = true
         self.inform_scanline_counter_clk = true
     end
+    self:open_name()
+    self:wait_one_clock()
 
     -- when 337
     if self.any_show then
@@ -1629,6 +1630,7 @@ function PPU:main_loop()
     self:wait_frame()
     while true do
         self:pre_render()
+        self.on_scanline_0()
 
         while true do
             self:pre_render_scanline()
@@ -1645,6 +1647,7 @@ function PPU:main_loop()
                 self.vclk = self.vclk + line
                 self.hclk_target = self.hclk_target <= line and 0 or self.hclk_target - line
             else
+                self.on_scanline_240()
                 self.hclk = PPU.HCLOCK_VBLANK_0
                 self:wait_zero_clocks()
                 break

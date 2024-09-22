@@ -838,6 +838,14 @@ function MMC5:reset()
             self.ppu_nametable_mappings[2] = band(rshift(reg, 2), 0x3)
             self.ppu_nametable_mappings[3] = band(rshift(reg, 4), 0x3)
             self.ppu_nametable_mappings[4] = band(rshift(reg, 6), 0x3)
+            -- TODO: Unimplemented nametable mappings 2 and 3 (Extended RAM and fill-mode)
+            assert(self.ppu_nametable_mappings[1] <= 0x1)
+            assert(self.ppu_nametable_mappings[2] <= 0x1)
+            assert(self.ppu_nametable_mappings[3] <= 0x1)
+            assert(self.ppu_nametable_mappings[4] <= 0x1)
+            UTILS.print("self.ppu_nametable_mappings")
+            UTILS.print(self.ppu_nametable_mappings)
+            self.ppu:nametables(self.ppu_nametable_mapping)
         end)
     end
 
@@ -863,7 +871,7 @@ function MMC5:reset()
         function(v)
             self.ppu:scanline_counter_listener(v, scanline_counter_callback)
         end)
-    -- TODO: In Frame bit
+    -- TODO: Better In Frame bit
     self.cpu:add_mappings(0x5204, function(i, v)
             local ret = bor(self.in_frame_bit, self.scanline_pending_bit)
             self.scanline_pending_bit = 0x00
@@ -890,6 +898,12 @@ function MMC5:reset()
     self.ppu.chr_sprite_read = function(idx)
         local addr_1kpage_idx = rshift(idx, 10) -- / 0x400
         return self.chr_ref_sp_1k_chr_banks[addr_1kpage_idx + 1][band(idx, 0x3FF)]
+    end
+    self.ppu.on_scanline_0 = function()
+        self.in_frame_bit = 0x00
+    end
+    self.ppu.on_scanline_240 = function()
+        self.in_frame_bit = 0x40
     end
 end
 

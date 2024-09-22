@@ -184,6 +184,7 @@ local function drawAPUState()
         10,
         200
     )
+    love.graphics.print(string.format("MMC5: %04X", Nes.rom.ppu_nametable_mappings_reg), 10, 220)
 end
 local function draw()
     drawScreen()
