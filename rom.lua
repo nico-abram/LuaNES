@@ -115,9 +115,11 @@ function ROM:load_battery()
     if not self.battery then
         return
     end
-    local sav = self.basename + ".sav"
-    self.wrk.replace(sav.bytes)
-    local inp = assert(io.open(sav, "rb"))
+    local sav = self.basename .. ".sav"
+    local inp = io.open(sav, "rb")
+    if not inp then
+        return
+    end
     self.wrk = serpent.load(inp:read("*all"))
     assert(inp:close())
 end
@@ -126,7 +128,7 @@ function ROM:save_battery()
     if not self.battery then
         return
     end
-    local sav = self.basename + ".sav"
+    local sav = self.basename .. ".sav"
     print("Saving: " .. sav)
     local out = assert(io.open(sav, "wb"))
     out:write(serpent.dump(self.wrk))
@@ -838,8 +840,6 @@ function MMC5:reset()
             self.ppu_nametable_mappings[2] = band(rshift(reg, 2), 0x3)
             self.ppu_nametable_mappings[3] = band(rshift(reg, 4), 0x3)
             self.ppu_nametable_mappings[4] = band(rshift(reg, 6), 0x3)
-            UTILS.print(string.format("ppu_nametable_mappings_reg %04X %04X %04X %04X", self.ppu_nametable_mappings[1],
-                self.ppu_nametable_mappings[2], self.ppu_nametable_mappings[3], self.ppu_nametable_mappings[4]))
             -- TODO: Unimplemented nametable mappings 2 and 3 (Extended RAM and fill-mode)
             --assert(self.ppu_nametable_mappings[1] <= 0x1)
             --assert(self.ppu_nametable_mappings[2] <= 0x1)
@@ -998,3 +998,272 @@ function MMC5:scanline_counter_callback()
 end
 
 ROM.MAPPER_DB[0x05] = MMC5
+
+local AxROM = {}
+AxROM._mt = { __index = AxROM }
+setmetatable(AxROM, { __index = ROM })
+function AxROM:new(...)
+    local args = { ... }
+    table.insert(args, AxROM._mt)
+    local rom = ROM:new(unpack(args))
+    setmetatable(rom, AxROM._mt)
+    return rom
+end
+
+function AxROM:reset()
+    self.prg_banks = UTILS.flattenSplit(self.prg_banks, 1024 * 32)
+    self.current_prg_bank = self.prg_banks[1]
+    local write_prg = function(_i, v)
+        self.prg_bank_idx = band(v, 0x7) % #(self.prg_banks)
+        self.current_prg_bank = self.prg_banks[self.prg_bank_idx + 1]
+        self.ppu:nametables(band(v, 0x10) == 0 and "first" or "second")
+    end
+    local read_prg = function(i)
+        return self.current_prg_bank[i - 0x8000 + 1]
+    end
+
+    self.cpu:add_mappings(range(0x8000, 0xffff), read_prg, write_prg)
+end
+
+ROM.MAPPER_DB[0x07] = AxROM
+
+local ColorDreamsROM = {}
+ColorDreamsROM._mt = { __index = ColorDreamsROM }
+setmetatable(ColorDreamsROM, { __index = ROM })
+function ColorDreamsROM:new(...)
+    local args = { ... }
+    table.insert(args, ColorDreamsROM._mt)
+    local rom = ROM:new(unpack(args))
+    setmetatable(rom, ColorDreamsROM._mt)
+    return rom
+end
+
+function ColorDreamsROM:reset()
+    self.chr_banks           = UTILS.flattenSplit(self.chr_banks, 1024 * 8)
+    self.prg_banks           = UTILS.flattenSplit(self.prg_banks, 1024 * 32)
+
+    self.current_prg_bank    = self.prg_banks[1]
+    self.current_chr_bank    = self.chr_banks[1]
+    local write_prg          = function(_i, v)
+        self.prg_bank_idx = band(v, 0x3) % #(self.prg_banks)
+        self.chr_bank_idx = band(rshift(v, 4), 0xF) % #(self.chr_banks)
+        self.current_prg_bank = self.prg_banks[self.prg_bank_idx + 1]
+        self.current_chr_bank = self.chr_banks[self.chr_bank_idx + 1]
+    end
+    local read_prg           = function(i)
+        return self.current_prg_bank[i - 0x8000 + 1]
+    end
+    self.ppu.chr_peek        = function(i)
+        return self.current_chr_bank[i + 1]
+    end
+    self.ppu.chr_poke        = function(_i, _v)
+    end
+    self.ppu.chr_bg_read     = self.ppu.chr_peek
+    self.ppu.chr_sprite_read = self.ppu.chr_peek
+
+    self.cpu:add_mappings(range(0x8000, 0xffff), read_prg, write_prg)
+end
+
+ROM.MAPPER_DB[0x0B] = ColorDreamsROM
+
+local GxROM = {}
+GxROM._mt = { __index = GxROM }
+setmetatable(GxROM, { __index = ROM })
+function GxROM:new(...)
+    local args = { ... }
+    table.insert(args, GxROM._mt)
+    local rom = ROM:new(unpack(args))
+    setmetatable(rom, GxROM._mt)
+    return rom
+end
+
+function GxROM:reset()
+    self.prg_banks           = UTILS.flattenSplit(self.prg_banks, 1024 * 32)
+
+    self.current_prg_bank    = self.prg_banks[1]
+    self.current_chr_bank    = self.chr_banks[1]
+    local write_prg          = function(_i, v)
+        self.chr_bank_idx = band(v, 0x3) % #(self.chr_banks)
+        self.prg_bank_idx = band(rshift(v, 4), 0x3) % #(self.prg_banks)
+        self.current_prg_bank = self.prg_banks[self.prg_bank_idx + 1]
+        self.current_chr_bank = self.chr_banks[self.chr_bank_idx + 1]
+    end
+    local read_prg           = function(i)
+        return self.current_prg_bank[i - 0x8000 + 1]
+    end
+    self.ppu.chr_peek        = function(i)
+        return self.current_chr_bank[i + 1]
+    end
+    self.ppu.chr_poke        = function(i, v)
+        --self.current_chr_bank[i + 1] = v
+    end
+    self.ppu.chr_bg_read     = self.ppu.chr_peek
+    self.ppu.chr_sprite_read = self.ppu.chr_peek
+
+    self.cpu:add_mappings(range(0x8000, 0xffff), read_prg, write_prg)
+end
+
+ROM.MAPPER_DB[0x42] = GxROM
+
+local MMC2 = {}
+MMC2._mt = { __index = MMC2 }
+setmetatable(MMC2, { __index = ROM })
+function MMC2:new(...)
+    local args = { ... }
+    table.insert(args, MMC2._mt)
+    local rom = ROM:new(unpack(args))
+    setmetatable(rom, MMC2._mt)
+    return rom
+end
+
+function MMC2:reset()
+    self.prg_ram = UTILS.fill({}, 0x00, 1024 * 8) -- 8K PRG RAM
+    self.cpu:add_mappings(range(0x6000, 0x7fff), UTILS.tGetter(self.prg_ram, 1 - 0x6000),
+        UTILS.tSetter(self.prg_ram, 1 - 0x6000))
+
+    self.chr_banks            = UTILS.flattenSplit(self.chr_banks, 1024 * 4)
+    self.prg_banks            = UTILS.flattenSplit(self.prg_banks, 1024 * 8)
+
+    self.chr_bank_idxs        = { { 1, 1 }, { 1, 1 } } -- idxs into chr_banks
+    self.current_chr_banks    = { 1, 1 }               -- idxs into chr_bank_idxs[1] and [2]
+    self.ppu.chr_peek         = function(addr)
+        local masked = band(addr, 0xFFF)               -- addr within bank
+        local page = band(rshift(addr, 12), 0x1) + 1   -- address page 1 or 2
+
+        local latch = self.current_chr_banks[page]
+        local bank_idx = self.chr_bank_idxs[page][latch]
+        local bank = self.chr_banks[bank_idx]
+
+        if addr == 0x0FD8 then
+            self.current_chr_banks[1] = 1
+        elseif addr == 0x0FE8 then
+            self.current_chr_banks[1] = 2
+        elseif band(addr, 0x1FF8) == 0x1FD8 then
+            self.current_chr_banks[2] = 1
+        elseif band(addr, 0x1FF8) == 0x1FE8 then
+            self.current_chr_banks[2] = 2
+        end
+
+        return bank[masked + 1]
+    end
+    self.ppu.chr_poke         = function(i, v)
+    end
+    self.ppu.chr_bg_read      = self.ppu.chr_peek
+    self.ppu.chr_sprite_read  = self.ppu.chr_peek
+    local select_chr          = function(reg_num)
+        local idxs_table = reg_num <= 2 and self.chr_bank_idxs[1] or self.chr_bank_idxs[2]
+        local idx_in_idxs_table = reg_num > 2 and reg_num - 2 or reg_num
+        return function(_i, v)
+            idxs_table[idx_in_idxs_table] = band(v, 0x1F) + 1
+        end
+    end
+
+    local read_switchable_prg = function(i)
+        return self.current_prg_bank[i - 0x8000 + 1]
+    end
+    local read_fixed_prg      = function(i)
+        local addr = i - 0xA000
+        local bank = rshift(addr, 13)
+        bank       = #(self.prg_banks) - 2 + bank
+        addr       = band(addr, 0x1FFF)
+        return self.prg_banks[bank][addr + 1]
+    end
+    local write_prg           = function(_i, v)
+        self.prg_bank_idx = band(v, 0xF) % #(self.prg_banks)
+        self.current_prg_bank = self.prg_banks[self.prg_bank_idx + 1]
+    end
+    local mirroring           = function(_i, v)
+        self.ppu:nametables(band(v, 0x01) == 0x01 and "horizontal" or "vertical")
+    end
+    self.cpu:add_mappings(range(0x8000, 0x9FFF), read_switchable_prg, CPU.UNDEFINED)
+    self.cpu:add_mappings(range(0xA000, 0xAFFF), read_fixed_prg, write_prg)
+    self.cpu:add_mappings(range(0xB000, 0xBFFF), read_fixed_prg, select_chr(1))
+    self.cpu:add_mappings(range(0xC000, 0xCFFF), read_fixed_prg, select_chr(2))
+    self.cpu:add_mappings(range(0xD000, 0xDFFF), read_fixed_prg, select_chr(3))
+    self.cpu:add_mappings(range(0xE000, 0xEFFF), read_fixed_prg, select_chr(4))
+    self.cpu:add_mappings(range(0xF000, 0xFFFF), read_fixed_prg, mirroring)
+end
+
+ROM.MAPPER_DB[0x09] = MMC2
+
+local MMC4 = {}
+MMC4._mt = { __index = MMC4 }
+setmetatable(MMC4, { __index = ROM })
+function MMC4:new(...)
+    local args = { ... }
+    table.insert(args, MMC4._mt)
+    local rom = ROM:new(unpack(args))
+    setmetatable(rom, MMC4._mt)
+    return rom
+end
+
+function MMC4:reset()
+    self.prg_ram = UTILS.fill({}, 0x00, 1024 * 8) -- 8K PRG RAM
+    self.cpu:add_mappings(range(0x6000, 0x7fff), UTILS.tGetter(self.prg_ram, 1 - 0x6000),
+        UTILS.tSetter(self.prg_ram, 1 - 0x6000))
+
+    self.chr_banks            = UTILS.flattenSplit(self.chr_banks, 1024 * 4)
+    self.prg_banks            = UTILS.flattenSplit(self.prg_banks, 1024 * 16)
+
+    self.chr_bank_idxs        = { { 1, 2 }, { 1, 1 } } -- idxs into chr_banks
+    self.current_chr_banks    = { 1, 1 }               -- idxs into chr_bank_idxs[1] and [2]
+    self.ppu.chr_peek         = function(addr)
+        local masked = band(addr, 0xFFF)               -- addr within bank
+        local page = band(rshift(addr, 12), 0x1) + 1   -- address page 1 or 2
+
+        local latch = self.current_chr_banks[page]
+        local bank_idx = self.chr_bank_idxs[page][latch]
+        local bank = self.chr_banks[bank_idx]
+
+        if band(addr, 0x1FF8) == 0x0FD8 then
+            self.current_chr_banks[1] = 1
+        elseif band(addr, 0x1FF8) == 0x0FE8 then
+            self.current_chr_banks[1] = 2
+        elseif band(addr, 0x1FF8) == 0x1FD8 then
+            self.current_chr_banks[2] = 1
+        elseif band(addr, 0x1FF8) == 0x1FE8 then
+            self.current_chr_banks[2] = 2
+        end
+
+        return bank[masked + 1]
+    end
+    self.ppu.chr_bg_read      = self.ppu.chr_peek
+    self.ppu.chr_sprite_read  = self.ppu.chr_peek
+    local select_chr          = function(reg_num)
+        local idxs_table = reg_num <= 2 and self.chr_bank_idxs[1] or self.chr_bank_idxs[2]
+        local idx_in_idxs_table
+        if reg_num > 2 then
+            idx_in_idxs_table = reg_num - 2
+        else
+            idx_in_idxs_table = reg_num
+        end
+        return function(_i, v)
+            idxs_table[idx_in_idxs_table] = (band(v, 0x1F) % #(self.chr_banks)) + 1
+        end
+    end
+
+    local read_switchable_prg = function(i)
+        return self.current_prg_bank[i - 0x8000 + 1]
+    end
+    local last_prg_bank       = self.prg_banks[#(self.prg_banks)]
+    local read_fixed_prg      = function(i)
+        local addr = i - 0xC000
+        return last_prg_bank[addr + 1]
+    end
+    local write_prg           = function(_i, v)
+        self.prg_bank_idx = band(v, 0xF) % #(self.prg_banks)
+        self.current_prg_bank = self.prg_banks[self.prg_bank_idx + 1]
+    end
+    local mirroring           = function(_i, v)
+        self.ppu:nametables(band(v, 0x01) == 0x01 and "horizontal" or "vertical")
+    end
+    self.cpu:add_mappings(range(0x8000, 0x9FFF), read_switchable_prg, CPU.UNDEFINED)
+    self.cpu:add_mappings(range(0xA000, 0xAFFF), read_switchable_prg, write_prg)
+    self.cpu:add_mappings(range(0xB000, 0xBFFF), read_switchable_prg, select_chr(1))
+    self.cpu:add_mappings(range(0xC000, 0xCFFF), read_fixed_prg, select_chr(2))
+    self.cpu:add_mappings(range(0xD000, 0xDFFF), read_fixed_prg, select_chr(3))
+    self.cpu:add_mappings(range(0xE000, 0xEFFF), read_fixed_prg, select_chr(4))
+    self.cpu:add_mappings(range(0xF000, 0xFFFF), read_fixed_prg, mirroring)
+end
+
+ROM.MAPPER_DB[0x0A] = MMC4

@@ -1028,7 +1028,7 @@ end
 
 --------------------------------------------------------------------------------------------------------------------
 -- default core
-function CPU:printState(doFetch)
+function CPU:printState()
     --[
     local ppuclk = 0
     if self.ppu then
@@ -1039,8 +1039,8 @@ function CPU:printState(doFetch)
             "PC:%04X OP:%02X %02X %02X %s %04X %02X \t A:%02X X:%02X Y:%02X P:%02X SP:%02X CYC:%3d",
             self._pc,
             self.opcode or 0,
-            doFetch and self:fetch(self._pc + 1) or -1,
-            doFetch and self:fetch(self._pc + 2) or -1,
+            self:fetch(self._pc + 1) or -1,
+            self:fetch(self._pc + 2) or -1,
             table.concat(DISPATCH[self.opcode] or {}, " "),
             self.data,
             self.addr,
@@ -1129,25 +1129,16 @@ end
 
 local asd = 0
 function CPU:run_once()
-    --if self._pc == 0x875E or self._pc == (0x875E + 1) or self._pc == (0x875E + 2) or self._pc == (0x875E - 1) or self._pc == (0x875E + 3) then
     --[[
+    -- "we have breakpoints at home"
+    -- "breakpoints at home:"
     local pccheck = 0xE144
     if self._pc == pccheck or self._pc == (pccheck + 1) or self._pc == (pccheck + 2) or self._pc == (pccheck - 1) or self._pc == (pccheck + 3) then
         asd = asd
     end
     --]]
     self.opcode = self:fetch(self._pc)
-    --self:printState(true)
-    --[[
-    if printThething then
-        self:printState(true)
-    end
-    ]]
-    --[[
-    if self.conf.loglevel >= 3 then
-        self:printState(true)
-    end
-    --]]
+    self.dbgPrintState()
     self._pc = self._pc + 1
 
     --[[
@@ -1158,19 +1149,16 @@ function CPU:run_once()
     if self.ppu_sync then
         self.ppu:sync(self.clk)
     end
-    --[[
-    asd = asd + 1
-    if asd > 350000000 then
-        if asdasdsssasd then
-            asdasdsssasd:flush()
-            asdasdsssasd:close()
-        end
-        error "asd"
-    end
-    ]]
 end
 
 function CPU:run()
+    if self.conf.loglevel >= 3 or self.dbgPrint then
+        self.dbgPrintState = function()
+            self:printState()
+        end
+    else
+        self.dbgPrintState = function() end
+    end
     self:do_clock()
     repeat
         repeat

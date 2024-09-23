@@ -45,6 +45,7 @@ function love.load(arg)
     end
     if vscode_debugger then
         IS_DEBUG = true
+        loglvl = 3
     end
     local pc = nil
     if arg[4] and string.sub(arg[4], 1, 3) == "0x" then
@@ -91,10 +92,9 @@ local keyButtons = {
     ["i"] = Pad.SELECT,
     ["return"] = Pad.START
 }
-printTheThing = false
 function love.keypressed(key)
     if key == "t" then
-        printThething = true
+        Nes.cpu.dbgPrint = true
     end
     for k, v in pairs(keyButtons) do
         if k == key then
@@ -105,7 +105,7 @@ end
 
 function love.keyreleased(key)
     if key == "t" then
-        printThething = false
+        Nes.cpu.dbgPrint = false
     end
     for k, v in pairs(keyButtons) do
         if k == key then

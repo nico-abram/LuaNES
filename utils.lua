@@ -26,9 +26,10 @@ function UTILS.timeF(f, n)
     return os.clock() - t
 end
 
-function UTILS.tSetter(t)
+function UTILS.tSetter(t, offs)
+    offs = (offs or 0)
     return function(i, v)
-        t[i] = v
+        t[i + offs] = v
     end
 end
 
@@ -37,6 +38,36 @@ function UTILS.tGetter(t, offs)
     return function(i)
         return t[i + offs]
     end
+end
+
+-- turns a table of tables, where the inner tables are all of a fixed size N
+-- into a new table of tables, where the inner tables are all of size new_size
+function UTILS.flattenSplit(tt, new_size)
+    local tt_first_idx = tt[0] and 0 or 1
+
+    local new_tt = {}
+    local new_tt_idx = tt_first_idx
+    local new_t_idx = tt[tt_first_idx][0] and 0 or 1
+
+    if new_t_idx == 0 then
+        new_size = new_size - 1
+    end
+
+    for tt_idx = tt_first_idx, #tt do
+        local t = tt[tt_idx]
+        for t_idx = t[0] and 0 or 1, #t do
+            if new_t_idx == new_size + 1 then
+                new_t_idx = tt[tt_first_idx][0] and 0 or 1
+                new_tt_idx = new_tt_idx + 1
+                new_tt[new_tt_idx] = {}
+            elseif new_tt[new_tt_idx] == nil then
+                new_tt[new_tt_idx] = {}
+            end
+            new_tt[new_tt_idx][new_t_idx] = t[t_idx]
+            new_t_idx = new_t_idx + 1
+        end
+    end
+    return new_tt
 end
 
 function UTILS.map(t, f)

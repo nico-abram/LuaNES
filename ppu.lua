@@ -414,6 +414,21 @@ PPU.NMT_TABLE = {
 function PPU:nametables(mode)
     self:update(RP2C02_CC)
     local idxs = PPU.NMT_TABLE[mode] or mode
+
+    --[[
+    -- disable nametable LUT caching:
+    self.nmt_ref[0] = self.nmt_mem[idxs[1] ]
+    self.nmt_ref[1] = self.nmt_mem[idxs[2 ] ]
+    self.nmt_ref[2] = self.nmt_mem[idxs[3] ]
+    self.nmt_ref[3] = self.nmt_mem[idxs[4] ]
+
+    self.lut_update = nil
+    self.nt_cache.lut_update = nil
+    self:setup_lut()
+    if true then
+        return
+    end
+    --]]
     if
         UTILS.all(
             range(0, 3),
@@ -752,7 +767,7 @@ function PPU:poke_2007(_addr, data)
     else
         addr = band(addr, 0x3fff)
         if addr >= 0x2000 then
-            local nmt_bank = self.nmt_ref[band(rshift(addr, 10), 0x3)]
+            -- nametable RAM
             local nmt_idx = band(addr, 0x03ff)
             if nmt_bank[nmt_idx] ~= data then
                 nmt_bank[nmt_idx] = data
@@ -949,6 +964,7 @@ function PPU:fetch_bg_pattern_0()
     if not self.any_show then
         return
     end
+    --UTILS.print(string.format("fetch_bg_pattern_0 addr:%04X hclk:%d", band(self.io_addr, 0x1fff), self.hclk))
     self.bg_pattern = self.chr_bg_read(band(self.io_addr, 0x1fff))
     --self.bg_pattern = self.chr_mem[1 + band(self.io_addr, 0x1fff)]
 end
@@ -957,6 +973,7 @@ function PPU:fetch_bg_pattern_1()
     if not self.any_show then
         return
     end
+    --UTILS.print(string.format("fetch_bg_pattern_1 addr:%04X hclk:%d", band(self.io_addr, 0x1fff), self.hclk))
     self.bg_pattern = bor(self.bg_pattern, self.chr_bg_read(band(self.io_addr, 0x1fff)) * 0x100)
     --self.bg_pattern = bor(self.bg_pattern, self.chr_mem[1 + band(self.io_addr, 0x1fff)] * 0x100)
 end
