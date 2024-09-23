@@ -5,6 +5,13 @@ if pcall(require, "jit.opt") then
     --
     )
 end
+
+if false then
+    PROF_CAPTURE = true
+    if pcall(require, "libs/jprof") then
+        prof = require("libs/jprof")
+    end
+end
 require "nes"
 Nes = nil
 local width = 256
@@ -82,6 +89,8 @@ function love.load(arg)
 end
 
 local keyEvents = {}
+local keyDownEventObjCache = {}
+local keyUpEventObjCache = {}
 local keyButtons = {
     ["w"] = Pad.UP,
     ["a"] = Pad.LEFT,
@@ -96,9 +105,19 @@ function love.keypressed(key)
     if key == "t" then
         Nes.cpu.dbgPrint = true
     end
+    if key == "m" then
+        if not ProFi then
+            ProFi = require("libs/ProFi")
+            ProFi:checkMemory()
+            ProFi:start()
+        end
+    end
     for k, v in pairs(keyButtons) do
         if k == key then
-            keyEvents[#keyEvents + 1] = { "keydown", v }
+            if keyDownEventObjCache[v] == nil then
+                keyDownEventObjCache[v] = { "keydown", v }
+            end
+            keyEvents[#keyEvents + 1] = keyDownEventObjCache[v]
         end
     end
 end
@@ -107,9 +126,19 @@ function love.keyreleased(key)
     if key == "t" then
         Nes.cpu.dbgPrint = false
     end
+    if key == "m" then
+        if ProFi then
+            ProFi:stop()
+            ProFi:writeReport('MyProfilingReport.txt')
+            Profi = nil
+        end
+    end
     for k, v in pairs(keyButtons) do
         if k == key then
-            keyEvents[#keyEvents + 1] = { "keyup", v }
+            if keyUpEventObjCache[v] == nil then
+                keyUpEventObjCache[v] = { "keyup", v }
+            end
+            keyEvents[#keyEvents + 1] = keyUpEventObjCache[v]
         end
     end
 end
@@ -117,7 +146,11 @@ end
 love.frame = 0
 local time = 0
 local timeTwo = 0
-local rate = 1 / 59.94
+local update_freq = 59.94
+local rate = 1 / update_freq
+local max_updates_per_frame = update_freq * 1.2
+local fpsHistory = UTILS.fill({}, 120, 120)
+local fpsIdx = 1
 local fps = 0
 local tickRate = 0
 local tickRatetmp = 0
@@ -128,7 +161,7 @@ local function update()
     for i, v in ipairs(keyEvents) do
         Nes.pads[v[1]](Nes.pads, 1, v[2])
     end
-    keyEvents = {}
+    table.clear(keyEvents)
     Nes:run_once()
     local samples = Nes.cpu.apu.output
     for i = 1, #samples do
@@ -192,6 +225,8 @@ local function drawAPUState()
         200
     )
     --love.graphics.print(string.format("MMC5: %04X", Nes.rom.ppu_nametable_mappings_reg), 10, 220)
+    love.graphics.print(string.format("garbage count(LUA): %d", collectgarbage("count")), 10, 220)
+    --collectgarbage("collect")
 end
 local function draw()
     drawScreen()
@@ -201,14 +236,26 @@ local function draw()
     end
 end
 function love.draw()
+    --prof.push("frame")
     --[
     time = time + love.timer.getDelta()
     timeTwo = timeTwo + love.timer.getDelta()
     --[[
     --]]
-    while time > rate do
+    local update_count = 0
+    update()
+    update()
+    update()
+    update()
+    update()
+    update()
+    update()
+    update()
+    update()
+    while time > rate and update_count < max_updates_per_frame do
         time = time - rate
-        update()
+        --update()
+        update_count = update_count + 1
     end
     --update()
     if timeTwo > 1 then
@@ -217,6 +264,13 @@ function love.draw()
         tickRatetmp = 0
     end
     fps = 1 / love.timer.getDelta()
+    fpsHistory[fpsIdx] = fps
+    fpsIdx = (fpsIdx % #fpsHistory) + 1
+    fps = 0
+    for i = 1, #fpsHistory do
+        fps = fps + fpsHistory[i]
+    end
+    fps = fps / #fpsHistory
     --]]
     --[[
     timeTwo = timeTwo + love.timer.getDelta()
@@ -257,4 +311,12 @@ function love.draw()
     image:replacePixels(imageData)
 
     draw()
+    --prof.pop("frame")
+end
+
+function love.quit()
+    if prof then
+        prof.write("prof.mpack")
+    end
+    return false
 end

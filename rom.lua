@@ -1117,6 +1117,7 @@ function MMC2:new(...)
 end
 
 function MMC2:reset()
+    self.wrk     = nil
     self.prg_ram = UTILS.fill({}, 0x00, 1024 * 8) -- 8K PRG RAM
     self.cpu:add_mappings(range(0x6000, 0x7fff), UTILS.tGetter(self.prg_ram, 1 - 0x6000),
         UTILS.tSetter(self.prg_ram, 1 - 0x6000))
@@ -1198,6 +1199,7 @@ function MMC4:new(...)
 end
 
 function MMC4:reset()
+    self.wrk     = nil
     self.prg_ram = UTILS.fill({}, 0x00, 1024 * 8) -- 8K PRG RAM
     self.cpu:add_mappings(range(0x6000, 0x7fff), UTILS.tGetter(self.prg_ram, 1 - 0x6000),
         UTILS.tSetter(self.prg_ram, 1 - 0x6000))

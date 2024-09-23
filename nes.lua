@@ -32,19 +32,37 @@ function NES:reset()
 end
 
 function NES:run_once()
+    --prof.push("NES:run_once")
+    --prof.push("ppu:setup_frame")
     self.cpu.ppu:setup_frame()
+    --prof.pop("ppu:setup_frame")
+
+    --prof.push("cpu:run")
     self.cpu:run()
+    --prof.pop("cpu:run")
+
+    --prof.push("vsync")
+    --prof.push("ppu:vsync")
     self.cpu.ppu:vsync()
+    --prof.pop("ppu:vsync")
     --print "ppu vsync"
     --print(self.cpu.clk)
+    --prof.push("apu:vsync")
     self.cpu.apu:vsync()
+    --prof.pop("apu:vsync")
     --print "apu vsync"
     --print(self.cpu.clk)
+    --prof.push("cpu:vsync")
     self.cpu:vsync()
+    --prof.pop("cpu:vsync")
     self.rom:vsync()
+    --prof.pop("vsync")
 
     self.frame = self.frame + 1
+    --prof.pop("NES:run_once")
 end
+
+jit.off(NES.run_once)
 
 function NES:run(counter)
     self:reset()

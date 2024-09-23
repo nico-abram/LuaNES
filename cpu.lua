@@ -121,6 +121,8 @@ function CPU:fetch(addr)
     return self._fetch[addr](addr)
 end
 
+--jit.off(CPU.fetch)
+
 function CPU:store(addr, value)
     return self._store[addr](addr, value)
 end
@@ -356,17 +358,39 @@ function CPU:flags_unpack(f)
 end
 
 ------ branch helper ------
-function CPU:branch(cond)
-    if cond then
-        local tmp = self._pc + 1
-        local rel = self:fetch(self._pc)
-        self._pc = band(tmp + (rel < 128 and rel or bor(rel, 0xff00)), 0xffff)
-        self.clk = self.clk + (nthBitIsSetInt(tmp, 8) == nthBitIsSetInt(self._pc, 8) and CLK[3] or CLK[4])
-    else
-        self._pc = self._pc + 1
-        self.clk = self.clk + CLK[2]
+function CPU:branch_true()
+    local tmp = self._pc + 1
+    local rel = self:fetch(self._pc)
+    self._pc = band(tmp + (rel < 128 and rel or bor(rel, 0xff00)), 0xffff)
+    self.clk = self.clk + (nthBitIsSetInt(tmp, 8) == nthBitIsSetInt(self._pc, 8) and CLK[3] or CLK[4])
+end
+
+function CPU:branch_false()
+    self._pc = self._pc + 1
+    self.clk = self.clk + CLK[2]
+end
+
+do
+    local branch_table = {}
+    branch_table[true] = CPU.branch_true
+    branch_table[false] = CPU.branch_false
+    function CPU:branch(cond)
+        branch_table[cond](self)
+        --[[
+        if cond then
+            local tmp = self._pc + 1
+            local rel = self:fetch(self._pc)
+            self._pc = band(tmp + (rel < 128 and rel or bor(rel, 0xff00)), 0xffff)
+            self.clk = self.clk + (nthBitIsSetInt(tmp, 8) == nthBitIsSetInt(self._pc, 8) and CLK[3] or CLK[4])
+        else
+            self._pc = self._pc + 1
+            self.clk = self.clk + CLK[2]
+        end
+        ]]
     end
 end
+
+--jit.off(CPU.branch)
 
 ------ storers ------
 function CPU:store_mem()
@@ -416,12 +440,22 @@ function CPU:zpg(read, write)
     self.addr = self:fetch(self._pc)
     self._pc = self._pc + 1
     self.clk = self.clk + CLK[3]
-    if read then
-        self.data = self.ram[self.addr]
-        if write then
-            self.clk = self.clk + CLK[2]
+
+    self.data = read and self.ram[self.addr] or self.data
+    self.clk = self.clk + ((read and write) and CLK[2] or 0)
+    --[[
+        if read then
+            self.data = self.ram[self.addr]
+            --self.clk = self.clk + zpg_write_clk[write]
+            --self.clk = self.clk + zpg_write_clk2[write and 2 or 1]
+            self.clk = self.clk + (write and CLK[2] or 0)
+            --[[
+            if write then
+                self.clk = self.clk + CLK[2]
+            end
+            --] ]
         end
-    end
+        --]]
 end
 
 -- zero-page indexed addressing
@@ -429,12 +463,17 @@ function CPU:zpg_reg(indexed, read, write)
     self.addr = band(indexed + self:fetch(self._pc), 0xff)
     self._pc = self._pc + 1
     self.clk = self.clk + CLK[4]
+
+    self.data = read and self.ram[self.addr] or self.data
+    self.clk = self.clk + ((read and write) and CLK[2] or 0)
+    --[[
     if read then
         self.data = self.ram[self.addr]
         if write then
             self.clk = self.clk + CLK[2]
         end
     end
+    --]]
 end
 
 function CPU:zpg_x(read, write)
@@ -529,6 +568,8 @@ function CPU:read_write(read, write)
         end
     end
 end
+
+--jit.off(CPU.read_write)
 
 --------------------------------------------------------------------------------------------------------------------
 -- instructions
@@ -1127,44 +1168,70 @@ function CPU:do_clock()
     self.clk_target = clock
 end
 
-local asd = 0
-function CPU:run_once()
-    --[[
+function CPU:_dbgPrintState() end
+
+function CPU:_run_once()
+    self.opcode = self:fetch(self._pc)
+    self._pc = self._pc + 1
+
+    local operationData = DISPATCH[self.opcode]
+    self[operationData[1]](self, unpack(operationData, 2))
+end
+
+function CPU:_run_once_dbg()
     -- "we have breakpoints at home"
     -- "breakpoints at home:"
-    local pccheck = 0xE144
-    if self._pc == pccheck or self._pc == (pccheck + 1) or self._pc == (pccheck + 2) or self._pc == (pccheck - 1) or self._pc == (pccheck + 3) then
+    local breakpoint = 0xE144
+    if self._pc == breakpoint then
         asd = asd
     end
-    --]]
+
     self.opcode = self:fetch(self._pc)
     self.dbgPrintState()
     self._pc = self._pc + 1
 
-    --[[
-    DISPATCHER[self.opcode](self)
-    ]]
     local operationData = DISPATCH[self.opcode]
     self[operationData[1]](self, unpack(operationData, 2))
-    if self.ppu_sync then
-        self.ppu:sync(self.clk)
-    end
+    --self[operationData[1]](self, operationData[2], operationData[3], operationData[4])
 end
 
+function CPU:_run_once_ppu_sync()
+    self:_run_once()
+    self.ppu:sync(self.clk)
+end
+
+CPU.run_once = CPU._run_once
+CPU.raw_run_once = true
+
 function CPU:run()
-    if self.conf.loglevel >= 3 or self.dbgPrint then
+    if self.conf.loglevel >= 3 or self.dbgPrint
+        and self._run_once ~= self._run_once_dbg then
         self.dbgPrintState = function()
             self:printState()
         end
-    else
-        self.dbgPrintState = function() end
+        self._run_once = self._run_once_dbg
+        if self._run_once == self.run_once then
+            self.run_once = self._run_once_dbg
+        end
+    elseif self.dbgPrintState ~= self._dbgPrintState then
+        self.dbgPrintState = self._dbgPrintState
     end
+    if self.ppu_sync and CPU.raw_run_once then
+        self.run_once = self._run_once_ppu_sync
+        CPU.raw_run_once = false
+    elseif not self.ppu_sync and not CPU.raw_run_once then
+        self.run_once = self._run_once
+        CPU.raw_run_once = true
+    end
+
     self:do_clock()
     repeat
+        --prof.push("inner_loop")
         repeat
             self:run_once()
         until not (self.clk < self.clk_target)
         self:do_clock()
+        --prof.pop("inner_loop")
     until not (self.clk < self.clk_frame)
 end
 

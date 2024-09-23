@@ -415,12 +415,12 @@ function PPU:nametables(mode)
     self:update(RP2C02_CC)
     local idxs = PPU.NMT_TABLE[mode] or mode
 
-    --[[
     -- disable nametable LUT caching:
+    --[[
     self.nmt_ref[0] = self.nmt_mem[idxs[1] ]
-    self.nmt_ref[1] = self.nmt_mem[idxs[2 ] ]
+    self.nmt_ref[1] = self.nmt_mem[idxs[2] ]
     self.nmt_ref[2] = self.nmt_mem[idxs[3] ]
-    self.nmt_ref[3] = self.nmt_mem[idxs[4] ]
+    self.nmt_ref[3] = self.nmt_mem[idxs[4]  ]
 
     self.lut_update = nil
     self.nt_cache.lut_update = nil
@@ -430,23 +430,19 @@ function PPU:nametables(mode)
     end
     --]]
     if
-        UTILS.all(
-            range(0, 3),
-            function(i)
-                return self.nmt_ref[i] == self.nmt_mem[idxs[i + 1]]
-            end
-        )
+        self.nmt_ref[0] == self.nmt_mem[idxs[1]] and
+        self.nmt_ref[1] == self.nmt_mem[idxs[2]] and
+        self.nmt_ref[2] == self.nmt_mem[idxs[3]] and
+        self.nmt_ref[3] == self.nmt_mem[idxs[4]]
     then
         return
     end
     if
         self.nt_cache.lut_update ~= nil and
-        UTILS.all(
-            range(0, 3),
-            function(i)
-                return self.nt_cache.nmt_ref[i] == self.nmt_mem[idxs[i + 1]]
-            end
-        )
+        self.nt_cache.nmt_ref[0] == self.nmt_mem[idxs[1]] and
+        self.nt_cache.nmt_ref[1] == self.nmt_mem[idxs[2]] and
+        self.nt_cache.nmt_ref[2] == self.nmt_mem[idxs[3]] and
+        self.nt_cache.nmt_ref[3] == self.nmt_mem[idxs[4]]
     then
         self.nt_cache.nmt_ref[0] = self.nmt_ref[0]
         self.nt_cache.nmt_ref[1] = self.nmt_ref[1]
@@ -502,6 +498,7 @@ function PPU:update(data_setup)
 end
 
 function PPU:setup_frame()
+    --prof.push("setup_frame")
     local clr = self.palette[16]
     local output = self.output_pixels
     for i = 1, PPU.SCREEN_HEIGHT * PPU.SCREEN_WIDTH do
@@ -512,6 +509,7 @@ function PPU:setup_frame()
     local t = self.hclk == HCLOCK_DUMMY and DUMMY_FRAME or BOOT_FRAME
     self.vclk, self.hclk_target = t[1], t[2]
     self.cpu:set_next_frame_clock(t[3])
+    --prof.pop("setup_frame")
 end
 
 function PPU:vsync()
@@ -768,6 +766,7 @@ function PPU:poke_2007(_addr, data)
         addr = band(addr, 0x3fff)
         if addr >= 0x2000 then
             -- nametable RAM
+            local nmt_bank = self.nmt_ref[band(rshift(addr, 10), 0x3)]
             local nmt_idx = band(addr, 0x03ff)
             if nmt_bank[nmt_idx] ~= data then
                 nmt_bank[nmt_idx] = data
@@ -861,7 +860,8 @@ function PPU:open_pattern(exp)
         return
     end
     self.io_addr = exp
-    return self:update_address_line()
+    local ual = self:update_address_line()
+    return ual
 end
 
 function PPU:open_sprite(buffer_idx)
@@ -873,7 +873,8 @@ function PPU:open_sprite(buffer_idx)
         self.sp_height == 16 and
         bor(lshift(band(byte1, 0x01), 12), lshift(band(byte1, 0xfe), 4), (nthBitIsSetInt(tmp, 3) * 0x10)) or
         bor(self.sp_base, lshift(byte1, 4))
-    return bor(addr, band(tmp, 7))
+    local ret = bor(addr, band(tmp, 7))
+    return ret
 end
 
 function PPU:load_sprite(pat0, pat1, buffer_idx)
@@ -891,6 +892,7 @@ function PPU:load_sprite(pat0, pat1, buffer_idx)
     if not self.sp_visible then
         self.sp_visible = true
         self.sp_map = {}
+        --table.clear(self.sp_map)
     end
     for i = 1, 8 do
         local x = x_base + i
@@ -1201,12 +1203,12 @@ function PPU:batch_render_eight_pixels_sp()
             local px = self:index_bg_pxs(i)
             local sprite = sp_map[hclk + i - 1]
             if sprite then
+                if sprite[1] and hclk255 then
+                    self.sp_zero_hit = true
+                end
                 if px % 4 == 0 then
                     px = sprite[2]
                 else
-                    if sprite[1] and hclk255 then
-                        self.sp_zero_hit = true
-                    end
                     if not sprite[0] then
                         px = sprite[2]
                     end
@@ -1310,17 +1312,33 @@ function PPU:debug_logging(scanline, hclk, hclk_target)
 end
 
 function PPU:run()
+    --prof.push("fiber_if")
     if not self.fiber then
-        self.fiber = coroutine.wrap(UTILS.bind(self.main_loop, self), 0)
+        --self:boot()
+        self.bound_main_loop = UTILS.bind(self.orig_main_loop, self)
+        self.fiber = coroutine.wrap(self.bound_main_loop)
+        --prof.pop("fiber_if")
+        --return
     end
+    --prof.pop("fiber_if")
 
     --if self.conf.loglevel >= 3 then self:debug_logging(self.scanline, self.hclk, self.hclk_target) end
 
+    --prof.push("make_sure_invariants")
     self:make_sure_invariants()
+    --prof.pop("make_sure_invariants")
 
-    if not self.fiber() then
+    --prof.push("fiber")
+    local is_frame_wait = self.fiber()
+    if not is_frame_wait then
         self.hclk_target = (self.vclk + self.hclk) * RP2C02_CC
+        --else
+        --prof.push("wrap")
+        --self.fiber = coroutine.wrap(self.bound_main_loop)
+        --prof.pop("wrap")
     end
+    --prof.pop("fiber")
+
     if self.inform_scanline_counter then
         self.inform_scanline_counter = false
         self.scanline_counter_callback()
@@ -1334,7 +1352,7 @@ end
 
 function PPU:wait_zero_clocks()
     if self.hclk_target <= self.hclk then
-        coroutine.yield()
+        coroutine.yield(false)
     end
 end
 
@@ -1692,7 +1710,7 @@ function PPU:post_render()
     self:wait_frame()
 end
 
-function PPU:main_loop()
+function PPU:orig_main_loop()
     -- when 685
 
     -- wait for boot
@@ -1733,4 +1751,41 @@ function PPU:main_loop()
         -- post-render scanline (vblank)
         self:post_render()
     end
+end
+
+function PPU:main_loop()
+    self:pre_render()
+    self.on_scanline_0()
+
+    while true do
+        self:pre_render_scanline()
+
+        if self.scanline ~= SCANLINE_VBLANK then
+            local line
+            if self.any_show then
+                line = (self.scanline ~= 0 or not self.odd_frame) and 341 or 340
+            else
+                self:update_enabled_flags_edge()
+                line = 341
+            end
+            self.hclk = 0
+            self.vclk = self.vclk + line
+            self.hclk_target = self.hclk_target <= line and 0 or self.hclk_target - line
+        else
+            self.on_scanline_240()
+            self.hclk = PPU.HCLOCK_VBLANK_0
+            self:wait_zero_clocks()
+            break
+        end
+        self:wait_zero_clocks()
+
+        -- visible scanline (shown)
+        self:render_scanline()
+
+        self:post_render_scanline()
+    end
+
+    -- post-render scanline (vblank)
+    self:post_render()
+    return true
 end

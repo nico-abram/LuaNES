@@ -1,5 +1,6 @@
 -- Refer to https://wiki.nesdev.com/w/index.php/APU
 -- for documentation on how the APU works
+require "table.clear"
 local band, bor, bxor, bnot, lshift, rshift = bit.band, bit.bor, bit.bxor, bit.bnot, bit.lshift, bit.rshift
 local map, rotatePositiveIdx, nthBitIsSet, nthBitIsSetInt, range, concat0, concat =
     UTILS.map,
@@ -286,8 +287,9 @@ function APU:flush_sound()
       end
     end
   end
-  self.output = concat({}, self.buffer)
-  self.buffer = {} --.clear
+  self.output = self.buffer --  concat({}, self.buffer)
+  self.buffer = {}          --.clear
+  --table.clear(self.buffer)
 end
 
 function APU:proceed(target)
