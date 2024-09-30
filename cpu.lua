@@ -121,8 +121,6 @@ function CPU:fetch(addr)
     return self._fetch[addr](addr)
 end
 
---jit.off(CPU.fetch)
-
 function CPU:store(addr, value)
     return self._store[addr](addr, value)
 end

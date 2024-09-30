@@ -1203,12 +1203,12 @@ function PPU:batch_render_eight_pixels_sp()
             local px = self:index_bg_pxs(i)
             local sprite = sp_map[hclk + i - 1]
             if sprite then
-                if sprite[1] and hclk255 then
-                    self.sp_zero_hit = true
-                end
                 if px % 4 == 0 then
                     px = sprite[2]
                 else
+                    if sprite[1] and hclk255 then
+                        self.sp_zero_hit = true
+                    end
                     if not sprite[0] then
                         px = sprite[2]
                     end

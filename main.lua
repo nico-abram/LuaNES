@@ -243,18 +243,9 @@ function love.draw()
     --[[
     --]]
     local update_count = 0
-    update()
-    update()
-    update()
-    update()
-    update()
-    update()
-    update()
-    update()
-    update()
     while time > rate and update_count < max_updates_per_frame do
         time = time - rate
-        --update()
+        update()
         update_count = update_count + 1
     end
     --update()
